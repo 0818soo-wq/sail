@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>오픽(OPIc) 답변 생성기</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="app-header">
+      <h1>오픽(OPIc) 답변 생성기</h1>
+      <p class="subtitle">레벨과 주제를 선택하면 템플릿을 조합해 모범 답변을 만들어 드려요.</p>
+    </header>
+
+    <main>
+      <section class="controls" aria-label="답변 생성 설정">
+        <div class="control-row">
+          <div class="field">
+            <label for="level-select">목표 레벨</label>
+            <select id="level-select"></select>
+          </div>
+          <div class="field">
+            <label for="topic-select">주제</label>
+            <select id="topic-select"></select>
+          </div>
+        </div>
+
+        <details class="personalize">
+          <summary>개인화 정보 (선택사항)</summary>
+          <div class="control-row">
+            <div class="field">
+              <label for="name-input">이름</label>
+              <input id="name-input" type="text" placeholder="예: Alex" />
+            </div>
+            <div class="field">
+              <label for="job-input">직업 / 신분</label>
+              <input id="job-input" type="text" placeholder="예: a college student" />
+            </div>
+            <div class="field">
+              <label for="city-input">거주 도시</label>
+              <input id="city-input" type="text" placeholder="예: Seoul" />
+            </div>
+          </div>
+        </details>
+
+        <div class="button-row">
+          <button id="generate-btn" class="primary">답변 생성하기</button>
+          <button id="speak-all-btn" class="secondary" disabled>전체 듣기</button>
+          <button id="stop-speak-btn" class="secondary" disabled>정지</button>
+        </div>
+      </section>
+
+      <section id="results" class="results" aria-label="생성된 답변" aria-live="polite">
+        <p class="placeholder">주제와 레벨을 선택한 뒤 '답변 생성하기'를 눌러보세요.</p>
+      </section>
+    </main>
+
+    <footer class="app-footer">
+      <p>※ 브라우저 내장 음성 합성(TTS)을 사용합니다. 기기/브라우저에 따라 영어 음성이 다를 수 있습니다.</p>
+    </footer>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
