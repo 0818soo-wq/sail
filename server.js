@@ -18,10 +18,29 @@ app.use(express.static(__dirname));
 // 앱이 현재 보여주는 문구를 서버가 들고 있다가, 접속한 표시 기기들에 SSE로 즉시 밀어준다.
 let current = { title: "", text: "", ts: 0 };
 const displayClients = new Set();
+const changeWaiters = new Set();
 
 function broadcastCurrent() {
   const payload = `data: ${JSON.stringify(current)}\n\n`;
   for (const res of displayClients) res.write(payload);
+  for (const resolve of changeWaiters) resolve();
+  changeWaiters.clear();
+}
+
+// 현재 문구가 바뀔 때까지(최대 timeoutMs) 기다린다 - 자동 새로고침이 안 되는 워치 브라우저용
+function waitForChange(sinceTs, timeoutMs) {
+  if (current.ts !== sinceTs) return Promise.resolve();
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      changeWaiters.delete(done);
+      resolve();
+    }, timeoutMs);
+    const done = () => {
+      clearTimeout(timer);
+      resolve();
+    };
+    changeWaiters.add(done);
+  });
 }
 
 app.get("/display", (req, res) => {
@@ -56,12 +75,19 @@ app.get("/api/control/stream", (req, res) => {
   });
 });
 
-app.get("/watch", (req, res) => {
+app.get("/watch", async (req, res) => {
   const flip = req.query.flip === "1";
   const suffix = flip ? "?flip=1" : "";
 
   if (req.query.cmd === "listen" || req.query.cmd === "next") {
+    const before = current.ts;
     sendControl(req.query.cmd);
+    // 폰이 새 문장(또는 상태)을 올릴 때까지 기다렸다가 돌려보내면, 워치 화면에 바로 최신 문장이 그려진다.
+    // "다음"은 문장 사이 이동이면 즉시, 질문 인식 + 답변 생성이면 몇 초가 걸린다.
+    await waitForChange(before, req.query.cmd === "next" ? 20000 : 4000);
+    if (req.query.cmd === "next" && current.text === "답변 만드는 중...") {
+      await waitForChange(current.ts, 20000); // 첫 문장이 나올 때까지 한 번 더
+    }
     return res.redirect(302, `/watch${suffix}`);
   }
 
@@ -79,11 +105,12 @@ app.get("/watch", (req, res) => {
     font-family: -apple-system, "Apple SD Gothic Neo", sans-serif; ${flip ? "transform: rotate(180deg);" : ""} }
   .s { margin: 0 0 6px; font-size: 12px; color: #8f8ff8; }
   .t { margin: 0 0 14px; font-size: 22px; line-height: 1.3; font-weight: 700; min-height: 1.3em; }
-  .btns { display: flex; gap: 8px; }
+  .btns { display: flex; gap: 8px; margin-bottom: 8px; }
   .btn { flex: 1; display: block; padding: 14px 0; border-radius: 12px; text-align: center;
     font-size: 16px; font-weight: 700; color: #fff; text-decoration: none; }
   .listen { background: #3b3b8f; }
   .next { background: #4f46e5; }
+  .reload { background: #222; color: #aaa; font-size: 13px; padding: 10px 0; }
 </style>
 </head>
 <body>
@@ -93,6 +120,7 @@ app.get("/watch", (req, res) => {
   <a class="btn listen" href="/watch?cmd=listen${flip ? "&flip=1" : ""}">🎧 듣기</a>
   <a class="btn next" href="/watch?cmd=next${flip ? "&flip=1" : ""}">▶ 다음</a>
 </div>
+<a class="btn reload" href="/watch${suffix}">↻ 새로고침</a>
 </body>
 </html>`);
 });
@@ -200,7 +228,8 @@ What separates Advanced High and Superior from Advanced Low - every answer must 
 OUTPUT FORMAT - follow exactly:
 - The answer only. Nothing before it, nothing after it
 - One sentence per line, each line a complete sentence
-- No numbering, no bullets, no blank lines, no quotation marks, no markdown, no filler sounds`;
+- No numbering, no bullets, no blank lines, no quotation marks, no markdown, no filler sounds
+- Do not include internal or system XML tags in your response`;
 
 app.post("/api/answer", express.raw({ type: () => true, limit: "25mb" }), async (req, res) => {
   if (!process.env.OPENAI_API_KEY) return res.status(503).json({ error: "OPENAI_API_KEY is not set" });
@@ -243,6 +272,8 @@ app.post("/api/answer", express.raw({ type: () => true, limit: "25mb" }), async 
       model: "claude-opus-5",
       max_tokens: 2000,
       system: ANSWER_SYSTEM_PROMPT,
+      // 첫 문장이 최대한 빨리 나오도록: 사고 과정 생략 + 낮은 effort
+      thinking: { type: "disabled" },
       output_config: { effort: "low" },
       messages: [
         {
