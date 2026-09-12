@@ -24,6 +24,12 @@
     #title { font-size: 3.5vmin; color: #8f8ff8; font-weight: 600; margin: 0 0 3vh; min-height: 1.4em; }
     #text { font-size: 11vmin; line-height: 1.25; font-weight: 800; margin: 0; word-break: normal; }
     #status { position: fixed; bottom: 2vh; right: 3vw; font-size: 2.5vmin; color: #555; }
+    #btns { position: fixed; left: 0; right: 0; bottom: 0; display: flex; gap: 2vw; padding: 2vh 3vw calc(2vh + env(safe-area-inset-bottom)); }
+    #btns button { flex: 1; padding: 3.5vh 0; border: none; border-radius: 3vmin; color: #fff; font-size: 4.5vmin; font-weight: 800; cursor: pointer; }
+    #btns button:active { filter: brightness(1.3); }
+    #listen { background: #3b3b8f; }
+    #next { background: #4f46e5; }
+    body { padding-bottom: 18vh; }
     #wake { position: fixed; inset: 0; z-index: 1; display: flex; align-items: center; justify-content: center;
       background: #000; font-size: 5vmin; color: #8f8ff8; cursor: pointer; }
     #wake[hidden] { display: none; }
@@ -37,6 +43,10 @@
   <p id="title"></p>
   <p id="text">연결 중...</p>
   <div id="status"></div>
+  <div id="btns">
+    <button id="listen">🎧 듣기</button>
+    <button id="next">▶ 다음</button>
+  </div>
   <button id="flip" aria-label="화면 뒤집기">↻</button>
   <div id="wake">터치해서 시작 (화면 꺼짐 방지)</div>
 
@@ -67,6 +77,13 @@
       wakeEl.hidden = true;
       try { if (navigator.wakeLock) await navigator.wakeLock.request("screen"); } catch {}
     });
+
+    // 리모컨: 폰 앱에 [듣기]/[다음] 명령을 보낸다
+    function sendCmd(cmd) {
+      fetch("/api/control", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cmd }) }).catch(() => {});
+    }
+    document.getElementById("listen").addEventListener("click", () => sendCmd("listen"));
+    document.getElementById("next").addEventListener("click", () => sendCmd("next"));
 
     // 뒤집기: ↻ 버튼 또는 ?flip=1 (설정은 기억됨)
     const root = document.documentElement;

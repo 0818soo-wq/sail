@@ -61,6 +61,13 @@ function sendControl(cmd) {
   for (const res of controlClients) res.write(payload);
 }
 
+app.post("/api/control", (req, res) => {
+  const { cmd } = req.body || {};
+  if (cmd !== "listen" && cmd !== "next") return res.status(400).json({ error: "invalid cmd" });
+  sendControl(cmd);
+  res.json({ ok: true });
+});
+
 app.get("/api/control/stream", (req, res) => {
   res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
   res.setHeader("Cache-Control", "no-cache");
