@@ -496,36 +496,42 @@ function onListenTap() {
   startListening();
 }
 
-// 아래 절반: 듣기 중이면 답변 시작, 답변 중이면 다음 3단어
+// 다음 문장(또는 다음 덩어리)으로 넘어간다. 재생 중이면 지금 소리를 끊고 넘어간다.
+function advance() {
+  if (supportsTTS) window.speechSynthesis.cancel();
+  if (session.chunkIndex + 1 < currentChunks().length) {
+    session.chunkIndex += 1;
+    playChunk();
+    return;
+  }
+  const next = session.sentenceIndex + 1;
+  if (session.sentences[next]) {
+    session.sentenceIndex = next;
+    session.chunkIndex = 0;
+    playChunk();
+  } else if (session.streamDone) {
+    finishItem();
+  } else {
+    session.sentenceIndex = next;
+    session.chunkIndex = 0;
+    session.phase = "S_PENDING";
+    render();
+  }
+}
+
+// 답변 영역: 듣기 중이면 답변 시작, 답변 중이면 (재생이 안 끝났어도) 다음 문장
 function onAnswerTap() {
   unlockOnFirstGesture();
   switch (session.phase) {
     case "LISTENING":
       submitQuestion();
       break;
-    case "S_WAIT": {
-      if (session.chunkIndex + 1 < currentChunks().length) {
-        session.chunkIndex += 1;
-        playChunk();
-        break;
-      }
-      const next = session.sentenceIndex + 1;
-      if (session.sentences[next]) {
-        session.sentenceIndex = next;
-        session.chunkIndex = 0;
-        playChunk();
-      } else if (session.streamDone) {
-        finishItem();
-      } else {
-        session.sentenceIndex = next;
-        session.chunkIndex = 0;
-        session.phase = "S_PENDING";
-        render();
-      }
+    case "S_PLAYING":
+    case "S_WAIT":
+      advance();
       break;
-    }
     default:
-      break; // 재생/처리 중이거나 답변이 없는 상태에서는 무시
+      break; // 처리 중이거나 답변이 없는 상태에서는 무시
   }
 }
 
