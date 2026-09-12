@@ -1,8 +1,9 @@
 services:
   - type: web
-    name: opic-one-button-trainer
+    name: opic-trainer
     runtime: node
-    plan: free
+    region: singapore
+    plan: starter
     buildCommand: npm install
     startCommand: npm start
     envVars:
