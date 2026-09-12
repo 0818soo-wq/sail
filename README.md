@@ -13,6 +13,28 @@ npm start
 
 브라우저에서 `http://localhost:3000` 접속.
 
+## Render로 배포하기 (무료)
+
+이 저장소에는 `render.yaml`이 포함되어 있어 [Render](https://render.com)에서 몇 번의 클릭만으로
+배포할 수 있습니다.
+
+1. https://dashboard.render.com 접속 → GitHub 계정으로 로그인/가입.
+2. **New +** → **Blueprint** 선택 → 이 GitHub 저장소(`0818soo-wq/sail`)를 선택.
+   (저장소 안의 `render.yaml`을 Render가 자동으로 인식합니다.)
+3. 서비스 이름 등은 기본값 그대로 두고 **Apply** 클릭.
+4. 배포 설정 화면에서 환경변수 `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` 입력란이 보이면,
+   미리 발급받은 VAPID 키 값을 각각 붙여넣습니다. (채팅으로 전달받은 값 — 이 값은 절대
+   깃허브 저장소에 커밋하지 말고 Render 환경변수에만 등록하세요.)
+5. **Create Web Service** 클릭 → 몇 분 내 빌드/배포가 끝나면 `https://opic-one-button-trainer.onrender.com`
+   같은 형태의 HTTPS 주소가 발급됩니다.
+6. 이후 코드를 `claude/opic-test-answer-generator-idt0e4` 브랜치(또는 main으로 머지 후)에
+   푸시하면 Render가 자동으로 재배포합니다.
+
+무료 플랜은 일정 시간 요청이 없으면 서버가 잠들었다가 다음 요청 시 다시 깨어납니다(첫 요청이
+몇 초 느릴 수 있음). 또한 무료 플랜은 디스크가 영구 저장되지 않아 서버가 재시작되면
+`subscriptions.json`(구독 목록)이 초기화될 수 있습니다 — 이 경우 앱에서 "🔔 워치 알림 켜기"를
+다시 한번 눌러주면 됩니다.
+
 ## 워치 알림을 실제로 쓰려면 (iPhone + Apple Watch)
 
 웹 푸시는 iOS에서 다음 조건을 모두 만족해야 동작합니다.
