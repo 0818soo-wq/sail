@@ -1,22 +1,21 @@
-import { TOPICS, DEFAULTS, QUESTION_TOPICS, QUESTION_TYPES } from "./data.js";
-import { PROFILE, profileSummary } from "./profile.js";
+import { profileSummary } from "./profile.js";
 
-const screenHome = document.getElementById("screen-home");
-const screenPractice = document.getElementById("screen-practice");
-const startBtn = document.getElementById("start-btn");
-const homeNote = document.getElementById("home-note");
-const tapArea = document.getElementById("tap-area");
-const statusText = document.getElementById("status-text");
+const listenZone = document.getElementById("listen-zone");
+const answerZone = document.getElementById("answer-zone");
+const listenStatus = document.getElementById("listen-status");
+const answerStatus = document.getElementById("answer-status");
 const sentenceText = document.getElementById("sentence-text");
+const contextText = document.getElementById("context-text");
 const progressText = document.getElementById("progress-text");
-const exitBtn = document.getElementById("exit-btn");
 
 const supportsTTS = "speechSynthesis" in window;
 const supportsPush = "serviceWorker" in navigator && "PushManager" in window;
+const supportsMic = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
 
 let englishVoice = null;
 let audioCtx = null;
 let pushEnabled = false;
+let gestureUnlocked = false;
 
 // ---------- TTS ----------
 // 기기에 설치된 영어 음성 중 가장 자연스러운 것을 고른다.
@@ -108,17 +107,19 @@ function urlBase64ToUint8Array(base64String) {
 async function enablePush() {
   if (!supportsPush) return false;
   const reg = await navigator.serviceWorker.register("sw.js");
-  const existing = await reg.pushManager.getSubscription();
-  if (existing) return true;
+  let sub = await reg.pushManager.getSubscription();
 
-  const permission = await Notification.requestPermission();
-  if (permission !== "granted") return false;
+  if (!sub) {
+    const permission = await Notification.requestPermission();
+    if (permission !== "granted") return false;
+    const { publicKey } = await (await fetch("/api/vapid-public-key")).json();
+    sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(publicKey),
+    });
+  }
 
-  const { publicKey } = await (await fetch("/api/vapid-public-key")).json();
-  const sub = await reg.pushManager.subscribe({
-    userVisibleOnly: true,
-    applicationServerKey: urlBase64ToUint8Array(publicKey),
-  });
+  // 서버가 재배포되면 구독 목록이 비므로, 이미 구독돼 있어도 매번 다시 등록한다
   await fetch("/api/subscribe", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -136,172 +137,15 @@ function pushToWatch(title, body) {
   }).catch(() => {});
 }
 
-// ---------- 문항 큐 ----------
-function fillPlaceholders(text) {
-  return text
-    .replaceAll("{name}", PROFILE.englishName || DEFAULTS.name)
-    .replaceAll("{job}", PROFILE.job || DEFAULTS.job)
-    .replaceAll("{city}", PROFILE.city || DEFAULTS.city);
-}
-
-function pickRandom(list) {
-  return list[Math.floor(Math.random() * list.length)];
-}
-
-// 생성 실패 시 쓰는 오프라인 폴백 문항
-function fallbackItem() {
-  const topics = Object.values(TOPICS);
-  const topic = pickRandom(topics);
-  const item = pickRandom(Object.values(topic.items));
-  return {
-    question: fillPlaceholders(item.question),
-    sentences: item.sentences.map(fillPlaceholders),
-  };
-}
-
-// 문항 프리페치: 앱을 열자마자 첫 문항을, 이후에는 한 문항씩 앞서 만들어
-// 질문을 듣는 동안 다음 준비가 끝나 있도록 한다
-const itemQueue = [];
-
-function prefetchItem() {
-  const topic = pickRandom(QUESTION_TOPICS);
-  const type = pickRandom(QUESTION_TYPES);
-  const request = fetch("/api/generate", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      topic,
-      questionType: type.id,
-      questionBrief: type.brief,
-      profile: profileSummary(),
-    }),
-  })
-    .then((r) => (r.ok ? r.json() : Promise.reject(new Error("generate failed"))))
-    .then((d) =>
-      d.question && Array.isArray(d.sentences) && d.sentences.length
-        ? { question: d.question, sentences: d.sentences }
-        : fallbackItem()
-    )
-    .catch(() => fallbackItem());
-  itemQueue.push(request);
-}
-
-function takeItem() {
-  if (!itemQueue.length) prefetchItem();
-  const next = itemQueue.shift();
-  prefetchItem(); // 항상 한 문항 앞서 준비
-  return next;
-}
-
-// ---------- 세션 ----------
-let session = null;
-// phase: LOADING | Q_PLAYING | Q_DONE | S_PLAYING | S_WAIT | ITEM_DONE
-
-function render() {
-  if (!session) return;
-  const { phase, sentences, sentenceIndex } = session;
-
-  switch (phase) {
-    case "Q_PLAYING":
-      statusText.textContent = "🎧 질문 듣는 중";
-      sentenceText.textContent = "";
-      progressText.textContent = "";
-      break;
-    case "Q_DONE":
-      statusText.textContent = "화면을 터치하세요";
-      sentenceText.textContent = "";
-      break;
-    case "LOADING":
-      statusText.textContent = "문제 준비 중...";
-      sentenceText.textContent = "";
-      progressText.textContent = "";
-      break;
-    case "S_PLAYING":
-    case "S_WAIT":
-      statusText.textContent = phase === "S_PLAYING" ? "" : "따라 말한 뒤 터치";
-      sentenceText.textContent = sentences[sentenceIndex];
-      progressText.textContent = `${sentenceIndex + 1} / ${sentences.length}`;
-      break;
-    case "ITEM_DONE":
-      statusText.textContent = "터치하면 다음 질문";
-      sentenceText.textContent = "";
-      progressText.textContent = "";
-      break;
-  }
-}
-
-async function nextItem() {
-  session.phase = "LOADING";
-  render();
-
-  const token = ++session.token;
-  const item = await takeItem();
-  if (!session || session.token !== token) return;
-
-  session.sentences = item.sentences;
-  session.sentenceIndex = 0;
-  session.phase = "Q_PLAYING";
-  render();
-  speak(item.question, () => {
-    if (!session || session.token !== token || session.phase !== "Q_PLAYING") return;
-    session.phase = "Q_DONE";
-    render();
-  });
-}
-
-function playSentence() {
-  const { sentences, sentenceIndex } = session;
-  session.phase = "S_PLAYING";
-  render();
-  pushToWatch(`${sentenceIndex + 1} / ${sentences.length}`, sentences[sentenceIndex]);
-  speak(sentences[sentenceIndex], () => {
-    if (!session || session.phase !== "S_PLAYING") return;
-    if (sentenceIndex + 1 < sentences.length) {
-      session.phase = "S_WAIT";
-      render();
-    } else {
-      session.phase = "ITEM_DONE";
-      statusText.textContent = "";
-      sentenceText.textContent = "";
-      playChime(() => {
-        if (session && session.phase === "ITEM_DONE") render();
-      });
-    }
-  });
-}
-
-function handleTap() {
-  if (!session) return;
+// 첫 터치에서만: iOS 음성 채널 열기 + 알림 구독 (터치를 막지 않도록 백그라운드)
+function unlockOnFirstGesture() {
   ensureAudioCtx();
-
-  switch (session.phase) {
-    case "Q_DONE":
-      playSentence();
-      break;
-    case "S_WAIT":
-      session.sentenceIndex += 1;
-      playSentence();
-      break;
-    case "ITEM_DONE":
-      nextItem();
-      break;
-    default:
-      break; // 재생/로딩 중에는 탭 무시
-  }
-}
-
-function start() {
-  ensureAudioCtx();
-  homeNote.textContent = "";
-
-  // iOS는 사용자 터치 안에서 첫 발화가 일어나야 이후 speak()가 소리를 낸다.
-  // 첫 문제는 네트워크 대기 뒤에 재생되므로 여기서 미리 음성 채널을 연다.
+  if (gestureUnlocked) return;
+  gestureUnlocked = true;
   if (supportsTTS) {
     window.speechSynthesis.cancel();
     window.speechSynthesis.speak(new SpeechSynthesisUtterance(" "));
   }
-
-  // 알림 권한 요청은 백그라운드로 - 시작을 막지 않는다
   enablePush()
     .then((ok) => {
       pushEnabled = ok;
@@ -309,42 +153,368 @@ function start() {
     .catch(() => {
       pushEnabled = false;
     });
+}
 
-  session = {
-    token: 0,
-    sentences: [],
-    sentenceIndex: 0,
-    phase: "LOADING",
+// ---------- 마이크로 질문 듣기 ----------
+let mediaStream = null;
+let recorder = null;
+let chunks = [];
+
+function pickRecorderMime() {
+  const candidates = ["audio/mp4", "audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus"];
+  return candidates.find((t) => MediaRecorder.isTypeSupported(t)) || "";
+}
+
+function releaseMic() {
+  if (mediaStream) {
+    mediaStream.getTracks().forEach((t) => t.stop());
+    mediaStream = null;
+  }
+  recorder = null;
+}
+
+async function startListening() {
+  if (supportsTTS) window.speechSynthesis.cancel();
+  releaseMic();
+  const token = ++session.token;
+  session.phase = "LISTENING";
+  render();
+
+  if (!supportsMic) {
+    session.phase = "MIC_ERROR";
+    render();
+    return;
+  }
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    if (session.token !== token) {
+      stream.getTracks().forEach((t) => t.stop());
+      return;
+    }
+    mediaStream = stream;
+  } catch {
+    if (session.token !== token) return;
+    session.phase = "MIC_ERROR";
+    render();
+    return;
+  }
+
+  chunks = [];
+  const mimeType = pickRecorderMime();
+  recorder = new MediaRecorder(mediaStream, mimeType ? { mimeType } : undefined);
+  recorder.ondataavailable = (e) => {
+    if (e.data && e.data.size) chunks.push(e.data);
+  };
+  recorder.start();
+}
+
+function stopListening() {
+  return new Promise((resolve) => {
+    const r = recorder;
+    if (!r || r.state === "inactive") {
+      releaseMic();
+      resolve(new Blob(chunks, { type: "audio/mp4" }));
+      return;
+    }
+    r.onstop = () => {
+      const blob = new Blob(chunks, { type: r.mimeType || "audio/mp4" });
+      releaseMic();
+      resolve(blob);
+    };
+    r.stop();
+  });
+}
+
+// ---------- 세션 ----------
+// phase: IDLE | LISTENING | PROCESSING | S_PLAYING | S_WAIT | S_PENDING | ITEM_DONE | ERROR | MIC_ERROR
+const session = {
+  token: 0,
+  phase: "IDLE",
+  question: "",
+  sentences: [],
+  sentenceIndex: 0,
+  chunkIndex: 0,
+  streamDone: false,
+  errorMessage: "",
+};
+
+// 한 문장을 3단어씩 끊는다. 마지막에 1단어만 남으면 앞 덩어리에 붙인다.
+const CHUNK_WORDS = 3;
+function chunkSentence(sentence) {
+  const words = sentence.split(/\s+/).filter(Boolean);
+  const chunks = [];
+  for (let i = 0; i < words.length; i += CHUNK_WORDS) {
+    chunks.push(words.slice(i, i + CHUNK_WORDS).join(" "));
+  }
+  if (chunks.length > 1 && chunks[chunks.length - 1].split(" ").length === 1) {
+    const last = chunks.pop();
+    chunks[chunks.length - 1] += " " + last;
+  }
+  return chunks;
+}
+
+function currentChunks() {
+  return chunkSentence(session.sentences[session.sentenceIndex]);
+}
+
+const ERROR_MESSAGES = {
+  no_speech: "질문이 들리지 않았어요",
+  transcription_failed: "질문을 알아듣지 못했어요",
+  generation_failed: "답변을 만들지 못했어요",
+  "OPENAI_API_KEY is not set": "서버에 음성 인식 키가 없어요",
+  "ANTHROPIC_API_KEY is not set": "서버에 Claude 키가 없어요",
+};
+
+function renderContext(chunks, currentIndex) {
+  contextText.textContent = "";
+  chunks.forEach((chunk, i) => {
+    const span = document.createElement("span");
+    span.textContent = (i > 0 ? " " : "") + chunk;
+    if (i === currentIndex) span.className = "cur";
+    else if (i < currentIndex) span.className = "done";
+    contextText.appendChild(span);
+  });
+}
+
+function render() {
+  const { phase, sentences, sentenceIndex, chunkIndex, streamDone } = session;
+  const total = streamDone ? String(sentences.length) : "…";
+
+  listenZone.classList.toggle("recording", phase === "LISTENING");
+  sentenceText.textContent = "";
+  contextText.textContent = "";
+  answerStatus.textContent = "";
+  progressText.textContent = "";
+
+  switch (phase) {
+    case "IDLE":
+      listenStatus.textContent = "터치해서 질문 듣기";
+      break;
+    case "LISTENING":
+      listenStatus.textContent = "🎧 듣는 중 · 질문이 끝나면 아래를 터치";
+      answerStatus.textContent = "질문이 끝나면 터치";
+      break;
+    case "PROCESSING":
+      listenStatus.textContent = "듣기 완료";
+      answerStatus.textContent = "답변 만드는 중...";
+      break;
+    case "S_PLAYING":
+    case "S_WAIT": {
+      const chunks = currentChunks();
+      listenStatus.textContent = "다음 질문은 여기 터치";
+      sentenceText.textContent = chunks[chunkIndex];
+      renderContext(chunks, chunkIndex);
+      answerStatus.textContent = phase === "S_WAIT" ? "따라 말한 뒤 터치" : "";
+      progressText.textContent = `문장 ${sentenceIndex + 1} / ${total} · ${chunkIndex + 1} / ${chunks.length}`;
+      break;
+    }
+    case "S_PENDING":
+      listenStatus.textContent = "다음 질문은 여기 터치";
+      answerStatus.textContent = "다음 문장 준비 중...";
+      progressText.textContent = `문장 ${sentenceIndex + 1} / ${total}`;
+      break;
+    case "ITEM_DONE":
+      listenStatus.textContent = "터치해서 다음 질문 듣기";
+      answerStatus.textContent = "✅ 답변 끝";
+      break;
+    case "ERROR":
+      listenStatus.textContent = "터치해서 다시 듣기";
+      answerStatus.textContent = session.errorMessage;
+      break;
+    case "MIC_ERROR":
+      listenStatus.textContent = "마이크를 사용할 수 없어요 · 설정에서 허용한 뒤 터치";
+      break;
+  }
+}
+
+function playChunk() {
+  const si = session.sentenceIndex;
+  const ci = session.chunkIndex;
+  const chunks = currentChunks();
+  const text = chunks[ci];
+  session.phase = "S_PLAYING";
+  render();
+  pushToWatch(
+    `${si + 1}${session.streamDone ? ` / ${session.sentences.length}` : ""} · ${ci + 1}/${chunks.length}`,
+    text
+  );
+  speak(text, () => {
+    if (session.phase !== "S_PLAYING" || session.sentenceIndex !== si || session.chunkIndex !== ci) return;
+    const hasMore = ci + 1 < chunks.length || si + 1 < session.sentences.length || !session.streamDone;
+    if (hasMore) {
+      session.phase = "S_WAIT";
+      render();
+    } else {
+      finishItem();
+    }
+  });
+}
+
+function finishItem() {
+  session.phase = "ITEM_DONE";
+  render();
+  answerStatus.textContent = "";
+  playChime(() => {
+    if (session.phase === "ITEM_DONE") render();
+  });
+}
+
+function showError(code) {
+  session.phase = "ERROR";
+  session.errorMessage = ERROR_MESSAGES[code] || "문제가 생겼어요";
+  render();
+}
+
+// 스트리밍으로 문장이 도착하거나 스트림이 끝났을 때, 기다리던 상태를 풀어준다
+function onSentencesUpdated() {
+  const { phase, sentences, sentenceIndex, chunkIndex, streamDone } = session;
+  if (phase === "PROCESSING") {
+    if (sentences.length > 0) {
+      session.sentenceIndex = 0;
+      session.chunkIndex = 0;
+      playChunk();
+    } else if (streamDone) {
+      showError("generation_failed");
+    }
+  } else if (phase === "S_PENDING") {
+    if (sentences[sentenceIndex]) {
+      session.chunkIndex = 0;
+      playChunk();
+    } else if (streamDone) {
+      finishItem();
+    }
+  } else if (
+    phase === "S_WAIT" &&
+    streamDone &&
+    sentenceIndex + 1 >= sentences.length &&
+    chunkIndex + 1 >= currentChunks().length
+  ) {
+    finishItem(); // 마지막 덩어리였음이 뒤늦게 확정된 경우 - 터치 없이 바로 종료음
+  }
+}
+
+async function submitQuestion() {
+  const token = ++session.token;
+  session.phase = "PROCESSING";
+  session.sentences = [];
+  session.sentenceIndex = 0;
+  session.chunkIndex = 0;
+  session.streamDone = false;
+  session.question = "";
+  render();
+
+  const blob = await stopListening();
+  if (session.token !== token) return;
+
+  const handleLine = (msg) => {
+    if (msg.error) throw new Error(msg.error);
+    if (msg.question) session.question = msg.question;
+    if (msg.sentence) {
+      session.sentences.push(msg.sentence);
+      onSentencesUpdated();
+    }
   };
 
-  screenHome.hidden = true;
-  screenPractice.hidden = false;
-  nextItem();
+  try {
+    const res = await fetch("/api/answer", {
+      method: "POST",
+      headers: {
+        "Content-Type": blob.type || "audio/mp4",
+        "X-Profile": encodeURIComponent(profileSummary()),
+      },
+      body: blob,
+    });
+    if (session.token !== token) return;
+    if (!res.ok) {
+      let code = "generation_failed";
+      try {
+        code = (await res.json()).error || code;
+      } catch {}
+      throw new Error(code);
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (session.token !== token) return;
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let idx;
+      while ((idx = buffer.indexOf("\n")) >= 0) {
+        const line = buffer.slice(0, idx).trim();
+        buffer = buffer.slice(idx + 1);
+        if (line) handleLine(JSON.parse(line));
+      }
+    }
+    if (buffer.trim()) handleLine(JSON.parse(buffer.trim()));
+
+    session.streamDone = true;
+    onSentencesUpdated();
+  } catch (err) {
+    if (session.token !== token) return;
+    showError(err && err.message);
+  }
 }
 
-function exitSession() {
-  if (supportsTTS) window.speechSynthesis.cancel();
-  session = null;
-  screenPractice.hidden = true;
-  screenHome.hidden = false;
+// 위 절반: 어떤 상태에서든 새 질문 듣기 시작 (진행 중이던 답변은 버린다)
+function onListenTap() {
+  unlockOnFirstGesture();
+  startListening();
 }
 
-startBtn.addEventListener("click", start);
-tapArea.addEventListener("click", handleTap);
-tapArea.addEventListener("keydown", (e) => {
+// 아래 절반: 듣기 중이면 답변 시작, 답변 중이면 다음 3단어
+function onAnswerTap() {
+  unlockOnFirstGesture();
+  switch (session.phase) {
+    case "LISTENING":
+      submitQuestion();
+      break;
+    case "S_WAIT": {
+      if (session.chunkIndex + 1 < currentChunks().length) {
+        session.chunkIndex += 1;
+        playChunk();
+        break;
+      }
+      const next = session.sentenceIndex + 1;
+      if (session.sentences[next]) {
+        session.sentenceIndex = next;
+        session.chunkIndex = 0;
+        playChunk();
+      } else if (session.streamDone) {
+        finishItem();
+      } else {
+        session.sentenceIndex = next;
+        session.chunkIndex = 0;
+        session.phase = "S_PENDING";
+        render();
+      }
+      break;
+    }
+    default:
+      break; // 재생/처리 중이거나 답변이 없는 상태에서는 무시
+  }
+}
+
+listenZone.addEventListener("click", onListenTap);
+answerZone.addEventListener("click", onAnswerTap);
+listenZone.addEventListener("keydown", (e) => {
   if (e.key === "Enter" || e.key === " ") {
     e.preventDefault();
-    handleTap();
+    onListenTap();
   }
 });
-exitBtn.addEventListener("click", (e) => {
-  e.stopPropagation();
-  exitSession();
+answerZone.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" || e.key === " ") {
+    e.preventDefault();
+    onAnswerTap();
+  }
 });
 
 if (supportsPush) {
   navigator.serviceWorker.register("sw.js").catch(() => {});
 }
 
-// 앱을 여는 순간부터 첫 문항을 만들어둔다 - START를 누를 때는 이미 준비된 상태
-prefetchItem();
+render();

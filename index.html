@@ -15,22 +15,20 @@
   <meta name="apple-mobile-web-app-title" content="OPIc" />
 </head>
 <body>
-  <!-- 홈 화면: START 버튼 하나 -->
-  <div id="screen-home" class="screen home-screen">
-    <h1 class="home-title">OPIc</h1>
-    <button id="start-btn" class="start-btn">START</button>
-    <p id="home-note" class="home-note"></p>
-  </div>
-
-  <!-- 연습 화면: 화면 전체가 터치 영역 -->
-  <div id="screen-practice" class="screen practice-screen" hidden>
-    <div id="tap-area" class="tap-area" role="button" tabindex="0">
-      <p id="status-text" class="status-text"></p>
-      <p id="sentence-text" class="sentence-text"></p>
+  <div class="split">
+    <!-- 위 절반: 듣기 -->
+    <div id="listen-zone" class="zone listen-zone" role="button" tabindex="0">
+      <p class="zone-label">듣기</p>
+      <p id="listen-status" class="zone-status">터치해서 질문 듣기</p>
     </div>
-    <div class="bottom-bar">
-      <span id="progress-text" class="progress-text"></span>
-      <button id="exit-btn" class="exit-btn">종료</button>
+
+    <!-- 아래 절반: 답변 말하기 -->
+    <div id="answer-zone" class="zone answer-zone" role="button" tabindex="0">
+      <p class="zone-label">답변 말하기</p>
+      <p id="sentence-text" class="sentence-text"></p>
+      <p id="context-text" class="context-text"></p>
+      <p id="answer-status" class="zone-status"></p>
+      <p id="progress-text" class="progress-text"></p>
     </div>
   </div>
 
