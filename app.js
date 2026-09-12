@@ -294,6 +294,13 @@ function start() {
   ensureAudioCtx();
   homeNote.textContent = "";
 
+  // iOS는 사용자 터치 안에서 첫 발화가 일어나야 이후 speak()가 소리를 낸다.
+  // 첫 문제는 네트워크 대기 뒤에 재생되므로 여기서 미리 음성 채널을 연다.
+  if (supportsTTS) {
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(new SpeechSynthesisUtterance(" "));
+  }
+
   // 알림 권한 요청은 백그라운드로 - 시작을 막지 않는다
   enablePush()
     .then((ok) => {
