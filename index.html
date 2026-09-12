@@ -5,6 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>오픽(OPIc) 원버튼 답변 트레이너</title>
   <link rel="stylesheet" href="style.css" />
+
+  <!-- PWA 설치(홈 화면 추가) + 웹 푸시(-> 아이폰 알림 -> 애플워치 미러링) 지원 -->
+  <link rel="manifest" href="manifest.json" />
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+  <meta name="theme-color" content="#4f46e5" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="OPIc 트레이너" />
 </head>
 <body>
   <!-- 주제 선택 화면 -->
@@ -13,6 +21,11 @@
       <h1>오픽(OPIc) 원버튼 답변 트레이너</h1>
       <p class="subtitle">주제를 고르면, 화면 터치만으로 질문 듣기 → 답변 생성 → 한 문장씩 따라 말하기가 진행됩니다.</p>
     </header>
+
+    <div class="watch-notify-row">
+      <button id="watch-notify-btn" class="secondary-btn">🔔 워치 알림 켜기</button>
+      <span id="watch-notify-status" class="watch-notify-status"></span>
+    </div>
 
     <details class="personalize">
       <summary>개인화 정보 (선택사항)</summary>

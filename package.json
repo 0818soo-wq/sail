@@ -1,0 +1,13 @@
+{
+  "name": "opic-one-button-trainer",
+  "version": "1.0.0",
+  "private": true,
+  "description": "오픽(OPIc) 원버튼 답변 트레이너 - 정적 프론트엔드 + 웹 푸시 알림 서버",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "web-push": "^3.6.7"
+  }
+}

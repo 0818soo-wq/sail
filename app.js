@@ -12,10 +12,13 @@ const tapArea = document.getElementById("tap-area");
 const hintText = document.getElementById("hint-text");
 const mainText = document.getElementById("main-text");
 const sentenceList = document.getElementById("sentence-list");
+const watchNotifyBtn = document.getElementById("watch-notify-btn");
+const watchNotifyStatus = document.getElementById("watch-notify-status");
 
 const supportsTTS = "speechSynthesis" in window;
 let englishVoice = null;
 let audioCtx = null;
+let pushEnabled = false;
 
 // ---------- 주제 목록 렌더링 ----------
 Object.entries(TOPICS).forEach(([topicId, topic]) => {
@@ -89,6 +92,119 @@ function playChime(onend) {
   playTone(ctx, 880, now, 0.32); // 띵
   playTone(ctx, 659.25, now + 0.34, 0.55); // 동
   if (onend) setTimeout(onend, 950);
+}
+
+// ---------- 워치 알림 (Web Push) ----------
+// 문장이 바뀔 때마다 서버로 알림 발송을 요청 -> 아이폰 알림 -> 애플워치로 자동 미러링
+const supportsPush = "serviceWorker" in navigator && "PushManager" in window;
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = atob(base64);
+  return Uint8Array.from([...rawData].map((c) => c.charCodeAt(0)));
+}
+
+function setWatchStatus(text) {
+  watchNotifyStatus.textContent = text;
+}
+
+async function registerServiceWorker() {
+  if (!supportsPush) return null;
+  try {
+    return await navigator.serviceWorker.register("sw.js");
+  } catch (e) {
+    console.error("서비스워커 등록 실패:", e);
+    return null;
+  }
+}
+
+async function checkExistingSubscription() {
+  if (!supportsPush) return;
+  const reg = await navigator.serviceWorker.ready;
+  const sub = await reg.pushManager.getSubscription();
+  pushEnabled = !!sub;
+  updateWatchButton();
+}
+
+function updateWatchButton() {
+  if (!supportsPush) {
+    watchNotifyBtn.disabled = true;
+    setWatchStatus("이 브라우저/환경은 웹 푸시를 지원하지 않아요.");
+    return;
+  }
+  watchNotifyBtn.classList.toggle("active", pushEnabled);
+  watchNotifyBtn.textContent = pushEnabled ? "🔔 워치 알림 켜짐" : "🔔 워치 알림 켜기";
+  setWatchStatus(pushEnabled ? "질문/문장이 바뀔 때마다 알림이 갑니다." : "");
+}
+
+async function enablePush() {
+  const reg = await registerServiceWorker();
+  if (!reg) {
+    setWatchStatus("서비스워커 등록에 실패했어요.");
+    return;
+  }
+  const permission = await Notification.requestPermission();
+  if (permission !== "granted") {
+    setWatchStatus("알림 권한이 거부되었어요.");
+    return;
+  }
+  const res = await fetch("/api/vapid-public-key");
+  const { publicKey } = await res.json();
+  const sub = await reg.pushManager.subscribe({
+    userVisibleOnly: true,
+    applicationServerKey: urlBase64ToUint8Array(publicKey),
+  });
+  await fetch("/api/subscribe", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(sub),
+  });
+  pushEnabled = true;
+  updateWatchButton();
+}
+
+async function disablePush() {
+  const reg = await navigator.serviceWorker.ready;
+  const sub = await reg.pushManager.getSubscription();
+  if (sub) {
+    await fetch("/api/unsubscribe", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ endpoint: sub.endpoint }),
+    });
+    await sub.unsubscribe();
+  }
+  pushEnabled = false;
+  updateWatchButton();
+}
+
+watchNotifyBtn.addEventListener("click", async () => {
+  watchNotifyBtn.disabled = true;
+  try {
+    if (pushEnabled) await disablePush();
+    else await enablePush();
+  } catch (e) {
+    console.error(e);
+    setWatchStatus("알림 설정 중 오류가 발생했어요.");
+  } finally {
+    watchNotifyBtn.disabled = !supportsPush ? true : false;
+  }
+});
+
+function pushNotify(title, body) {
+  if (!pushEnabled) return;
+  fetch("/api/notify", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title, body }),
+  }).catch(() => {});
+}
+
+if (supportsPush) {
+  registerServiceWorker().then(() => checkExistingSubscription());
+} else {
+  updateWatchButton();
 }
 
 // ---------- 세션 상태 ----------
@@ -220,6 +336,7 @@ function handleTap() {
     case "Q_READY":
       session.phase = "Q_PLAYING";
       renderPractice();
+      pushNotify(`❓ ${session.topicLabel} 질문`, item.question);
       speak(item.question, () => {
         session.phase = "A_READY";
         renderPractice();
@@ -240,6 +357,7 @@ function handleTap() {
       session.phase = "S_PLAYING";
       renderPractice();
       const idx = session.sentenceIndex;
+      pushNotify(`문장 ${idx + 1}/${item.sentences.length}`, item.sentences[idx]);
       speak(item.sentences[idx], () => {
         if (idx + 1 < item.sentences.length) {
           session.sentenceIndex = idx + 1;
@@ -264,6 +382,7 @@ function handleTap() {
         session.phase = "Q_READY";
       } else {
         session.phase = "SESSION_DONE";
+        pushNotify("🎉 완료", `${session.topicLabel} 연습을 모두 마쳤습니다.`);
       }
       renderPractice();
       break;

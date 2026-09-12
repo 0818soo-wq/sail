@@ -63,6 +63,41 @@ body {
   margin: 0 0 20px;
 }
 
+.watch-notify-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.secondary-btn {
+  padding: 9px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--card-bg);
+  color: var(--text);
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.secondary-btn:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.secondary-btn.active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+}
+
+.watch-notify-status {
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
 .personalize {
   border: 1px solid var(--border);
   border-radius: 10px;
