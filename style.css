@@ -89,6 +89,20 @@ html.flip .split {
   bottom: 14px;
 }
 
+.flip-btn {
+  position: absolute;
+  right: 14px;
+  bottom: 10px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  font-size: 1.1rem;
+  cursor: pointer;
+}
+
 .listen-zone {
   background: var(--listen-bg);
   padding-bottom: calc(24px + env(safe-area-inset-bottom));
@@ -123,7 +137,7 @@ html.flip .split {
 
 .sentence-text {
   margin: 0;
-  font-size: 0.8rem;
+  font-size: 1.36rem;
   line-height: 1.45;
   font-weight: 700;
   max-width: 640px;
@@ -154,6 +168,6 @@ html.flip .split {
 
 @media (max-width: 480px) {
   .sentence-text {
-    font-size: 0.7rem;
+    font-size: 1.19rem;
   }
 }

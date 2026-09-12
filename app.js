@@ -9,12 +9,10 @@ const contextText = document.getElementById("context-text");
 const progressText = document.getElementById("progress-text");
 
 const supportsTTS = "speechSynthesis" in window;
-const supportsPush = "serviceWorker" in navigator && "PushManager" in window;
 const supportsMic = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
 
 let englishVoice = null;
 let audioCtx = null;
-let pushEnabled = false;
 let gestureUnlocked = false;
 
 // ---------- TTS ----------
@@ -97,39 +95,7 @@ function playChime(onend) {
   if (onend) setTimeout(onend, 950);
 }
 
-// ---------- 워치 알림 (Web Push) ----------
-function urlBase64ToUint8Array(base64String) {
-  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
-  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
-  const rawData = atob(base64);
-  return Uint8Array.from([...rawData].map((c) => c.charCodeAt(0)));
-}
-
-async function enablePush() {
-  if (!supportsPush) return false;
-  const reg = await navigator.serviceWorker.register("sw.js");
-  let sub = await reg.pushManager.getSubscription();
-
-  if (!sub) {
-    const permission = await Notification.requestPermission();
-    if (permission !== "granted") return false;
-    const { publicKey } = await (await fetch("/api/vapid-public-key")).json();
-    sub = await reg.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(publicKey),
-    });
-  }
-
-  // 서버가 재배포되면 구독 목록이 비므로, 이미 구독돼 있어도 매번 다시 등록한다
-  await fetch("/api/subscribe", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(sub),
-  });
-  return true;
-}
-
-// 두 번째 화면(display.html)에 현재 문구를 보낸다
+// ---------- 두 번째 화면 (display.html) ----------
 function updateDisplay(title, text) {
   fetch("/api/current", {
     method: "POST",
@@ -138,18 +104,7 @@ function updateDisplay(title, text) {
   }).catch(() => {});
 }
 
-// 표시 화면 갱신 + 워치 알림이 켜져 있으면 푸시도 보낸다
-function pushToWatch(title, body) {
-  updateDisplay(title, body);
-  if (!pushEnabled) return;
-  fetch("/api/notify", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ title, body }),
-  }).catch(() => {});
-}
-
-// 첫 터치에서만: iOS 음성 채널 열기 + 알림 구독 (터치를 막지 않도록 백그라운드)
+// 첫 터치에서만: iOS는 사용자 터치 안에서 첫 발화가 일어나야 이후 speak()가 소리를 낸다
 function unlockOnFirstGesture() {
   ensureAudioCtx();
   if (gestureUnlocked) return;
@@ -158,13 +113,6 @@ function unlockOnFirstGesture() {
     window.speechSynthesis.cancel();
     window.speechSynthesis.speak(new SpeechSynthesisUtterance(" "));
   }
-  enablePush()
-    .then((ok) => {
-      pushEnabled = ok;
-    })
-    .catch(() => {
-      pushEnabled = false;
-    });
 }
 
 // ---------- 마이크로 질문 듣기 ----------
@@ -367,7 +315,7 @@ function playChunk() {
   session.phase = "S_PLAYING";
   render();
   const sentenceLabel = `${si + 1}${session.streamDone ? ` / ${session.sentences.length}` : ""}`;
-  pushToWatch(chunks.length > 1 ? `${sentenceLabel} · ${ci + 1}/${chunks.length}` : sentenceLabel, text);
+  updateDisplay(chunks.length > 1 ? `${sentenceLabel} · ${ci + 1}/${chunks.length}` : sentenceLabel, text);
   speak(text, () => {
     if (session.phase !== "S_PLAYING" || session.sentenceIndex !== si || session.chunkIndex !== ci) return;
     const hasMore = ci + 1 < chunks.length || si + 1 < session.sentences.length || !session.streamDone;
@@ -550,19 +498,33 @@ answerZone.addEventListener("keydown", (e) => {
   }
 });
 
-if (supportsPush) {
-  navigator.serviceWorker.register("sw.js").catch(() => {});
+// 홈 화면 설치용 서비스워커. 예전 버전이 만들어둔 알림 구독이 남아 있으면 해제한다.
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker
+    .register("sw.js")
+    .then((reg) => (reg.pushManager ? reg.pushManager.getSubscription() : null))
+    .then((sub) => sub && sub.unsubscribe())
+    .catch(() => {});
 }
 
-// ?flip=1 : 마주 보는 사람 기준으로 화면 180° 뒤집기 (한 번 켜면 기억)
-const flipParam = new URLSearchParams(location.search).get("flip");
-if (flipParam !== null) {
+// 마주 보는 사람 기준으로 화면 180° 뒤집기: ↻ 버튼 또는 ?flip=1 (설정은 기억됨)
+const flipBtn = document.getElementById("flip-btn");
+function setFlip(on) {
+  document.documentElement.classList.toggle("flip", on);
   try {
-    localStorage.setItem("flip", flipParam === "0" ? "0" : "1");
+    localStorage.setItem("flip", on ? "1" : "0");
   } catch {}
 }
-try {
-  if (localStorage.getItem("flip") === "1") document.documentElement.classList.add("flip");
-} catch {}
+const flipParam = new URLSearchParams(location.search).get("flip");
+if (flipParam !== null) setFlip(flipParam !== "0");
+else {
+  try {
+    if (localStorage.getItem("flip") === "1") setFlip(true);
+  } catch {}
+}
+flipBtn.addEventListener("click", (e) => {
+  e.stopPropagation();
+  setFlip(!document.documentElement.classList.contains("flip"));
+});
 
 render();

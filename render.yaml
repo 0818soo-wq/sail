@@ -6,7 +6,7 @@ services:
     buildCommand: npm install
     startCommand: npm start
     envVars:
-      - key: VAPID_PUBLIC_KEY
+      - key: ANTHROPIC_API_KEY
         sync: false
-      - key: VAPID_PRIVATE_KEY
+      - key: OPENAI_API_KEY
         sync: false
