@@ -46,6 +46,11 @@ body {
   flex-direction: column;
 }
 
+/* 마주 보는 사람이 읽을 수 있게 화면 전체를 180° 뒤집기 (?flip=1) */
+html.flip .split {
+  transform: rotate(180deg);
+}
+
 .zone {
   flex: 1;
   display: flex;

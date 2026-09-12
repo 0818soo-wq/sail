@@ -554,4 +554,15 @@ if (supportsPush) {
   navigator.serviceWorker.register("sw.js").catch(() => {});
 }
 
+// ?flip=1 : 마주 보는 사람 기준으로 화면 180° 뒤집기 (한 번 켜면 기억)
+const flipParam = new URLSearchParams(location.search).get("flip");
+if (flipParam !== null) {
+  try {
+    localStorage.setItem("flip", flipParam === "0" ? "0" : "1");
+  } catch {}
+}
+try {
+  if (localStorage.getItem("flip") === "1") document.documentElement.classList.add("flip");
+} catch {}
+
 render();
