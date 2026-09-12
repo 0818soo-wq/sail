@@ -260,11 +260,25 @@ function currentChunks() {
 
 const ERROR_MESSAGES = {
   no_speech: "질문이 들리지 않았어요",
-  transcription_failed: "질문을 알아듣지 못했어요",
+  transcription_failed: "음성 인식 서버 오류",
   generation_failed: "답변을 만들지 못했어요",
+  "empty audio": "녹음된 소리가 없어요 · 마이크 권한을 확인하세요",
   "OPENAI_API_KEY is not set": "서버에 음성 인식 키가 없어요",
   "ANTHROPIC_API_KEY is not set": "서버에 Claude 키가 없어요",
 };
+
+// 서버가 돌려준 실패 원인을 화면에 그대로 보여준다 - 어떤 키/계정 문제인지 바로 알 수 있게
+function describeFailure(payload) {
+  const code = payload && payload.error;
+  let message = ERROR_MESSAGES[code] || "문제가 생겼어요";
+  if (code === "transcription_failed") {
+    if (payload.status === 401) message = "OpenAI 키가 잘못됐어요";
+    else if (payload.status === 429) message = "OpenAI 크레딧 또는 사용 한도가 없어요";
+    else if (payload.status) message += ` (${payload.status})`;
+    if (payload.detail) message += `\n${String(payload.detail).slice(0, 160)}`;
+  }
+  return message;
+}
 
 function renderContext(chunks, currentIndex) {
   contextText.textContent = "";
@@ -360,9 +374,9 @@ function finishItem() {
   });
 }
 
-function showError(code) {
+function showError(message) {
   session.phase = "ERROR";
-  session.errorMessage = ERROR_MESSAGES[code] || "문제가 생겼어요";
+  session.errorMessage = message;
   render();
 }
 
@@ -375,7 +389,7 @@ function onSentencesUpdated() {
       session.chunkIndex = 0;
       playChunk();
     } else if (streamDone) {
-      showError("generation_failed");
+      showError(ERROR_MESSAGES.generation_failed);
     }
   } else if (phase === "S_PENDING") {
     if (sentences[sentenceIndex]) {
@@ -408,7 +422,7 @@ async function submitQuestion() {
   if (session.token !== token) return;
 
   const handleLine = (msg) => {
-    if (msg.error) throw new Error(msg.error);
+    if (msg.error) throw new Error(describeFailure(msg));
     if (msg.question) session.question = msg.question;
     if (msg.sentence) {
       session.sentences.push(msg.sentence);
@@ -427,11 +441,11 @@ async function submitQuestion() {
     });
     if (session.token !== token) return;
     if (!res.ok) {
-      let code = "generation_failed";
+      let payload = { error: "generation_failed" };
       try {
-        code = (await res.json()).error || code;
+        payload = await res.json();
       } catch {}
-      throw new Error(code);
+      throw new Error(describeFailure(payload));
     }
 
     const reader = res.body.getReader();
@@ -455,7 +469,7 @@ async function submitQuestion() {
     onSentencesUpdated();
   } catch (err) {
     if (session.token !== token) return;
-    showError(err && err.message);
+    showError((err && err.message) || "문제가 생겼어요");
   }
 }
 

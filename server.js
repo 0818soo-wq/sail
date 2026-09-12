@@ -105,21 +105,41 @@ const AUDIO_EXT = {
   "audio/mpeg": "mp3",
 };
 
-async function transcribe(audioBuffer, mimeType) {
+async function transcribeWith(model, audioBuffer, mimeType) {
   const form = new FormData();
   form.append("file", new Blob([audioBuffer], { type: mimeType }), `question.${AUDIO_EXT[mimeType] || "mp4"}`);
-  form.append("model", "gpt-4o-mini-transcribe");
+  form.append("model", model);
   form.append("language", "en");
-  form.append("prompt", "An OPIc English speaking test question read aloud by the examiner.");
+  form.append(
+    "prompt",
+    "An OPIc English speaking test. The examiner asks a question such as: I'd like to know about the place where you live. Tell me about a memorable experience. How has this changed compared to the past?"
+  );
 
   const res = await fetch("https://api.openai.com/v1/audio/transcriptions", {
     method: "POST",
     headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
     body: form,
   });
-  if (!res.ok) throw new Error(`transcription ${res.status}: ${await res.text()}`);
+  if (!res.ok) {
+    const err = new Error(`transcription ${res.status}`);
+    err.status = res.status;
+    err.detail = (await res.text()).slice(0, 300);
+    throw err;
+  }
   const data = await res.json();
   return (data.text || "").trim();
+}
+
+// 최신 모델을 먼저 쓰고, 형식/모델 문제로 거부되면 가장 호환성 높은 whisper-1로 재시도.
+// 키 오류(401)나 한도 초과(429)는 재시도해도 같으므로 바로 올린다.
+async function transcribe(audioBuffer, mimeType) {
+  try {
+    return await transcribeWith("gpt-4o-mini-transcribe", audioBuffer, mimeType);
+  } catch (err) {
+    if (err.status === 401 || err.status === 429) throw err;
+    console.warn("gpt-4o-mini-transcribe 실패, whisper-1로 재시도:", err.status, err.detail || err.message);
+    return await transcribeWith("whisper-1", audioBuffer, mimeType);
+  }
 }
 
 // ---------- 답변 생성 (Claude, 문장 단위 스트리밍) ----------
@@ -163,13 +183,20 @@ app.post("/api/answer", express.raw({ type: () => true, limit: "25mb" }), async 
   const mimeType = String(req.headers["content-type"] || "audio/mp4").split(";")[0].trim();
   const profile = req.headers["x-profile"] ? decodeURIComponent(String(req.headers["x-profile"])) : "";
 
+  console.log(`질문 녹음 수신: ${audio.length} bytes, ${mimeType}`);
+
   let question;
   try {
     question = await transcribe(audio, mimeType);
   } catch (err) {
-    console.error("음성 인식 실패:", err && err.message);
-    return res.status(502).json({ error: "transcription_failed" });
+    console.error("음성 인식 실패:", err && err.status, err && (err.detail || err.message));
+    return res.status(502).json({
+      error: "transcription_failed",
+      status: err && err.status,
+      detail: err && (err.detail || err.message),
+    });
   }
+  console.log("인식된 질문:", question);
   if (!question) return res.status(422).json({ error: "no_speech" });
 
   // NDJSON 스트림: {question} -> {sentence}... -> {done}
