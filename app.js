@@ -194,6 +194,7 @@ const session = {
   chunkIndex: 0,
   streamDone: false,
   errorMessage: "",
+  silenceBlocks: 0,
 };
 
 // 한 번에 읽어줄 단위. 0이면 문장 통째로, 3이면 3단어씩 끊어서 (마지막 1단어는 앞에 붙임)
@@ -367,8 +368,19 @@ async function submitQuestion() {
   updateDisplay("", "답변 만드는 중...");
 
   const peak = session.peakLevel || 0;
+  const meterRan = !!audioCtx && audioCtx.state === "running" && session.meterSamples >= 5;
   const blob = await stopListening();
   if (session.token !== token) return;
+
+  // 레벨 미터가 정상 동작했는데 입력이 완전 0이면(iOS가 마이크를 끊은 경우) 보내지 않는다.
+  // 조용한 방의 배경 소음도 이 값보다는 크므로 실제 질문을 막지는 않는다.
+  // 단, 미터 자체가 고장난 기기에서 영원히 막히지 않도록 연속 2번까지만 막고 그다음은 그냥 보낸다.
+  if (meterRan && peak < 0.004 && session.silenceBlocks < 2) {
+    session.silenceBlocks += 1;
+    showError(`${ERROR_MESSAGES.no_speech} · 마이크 입력이 0이에요. 다시 [듣기]를 눌러주세요`);
+    return;
+  }
+  session.silenceBlocks = 0;
 
   const handleLine = (msg) => {
     if (msg.error) throw new Error(describeFailure(msg));

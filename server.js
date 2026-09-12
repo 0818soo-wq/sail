@@ -169,15 +169,19 @@ const AUDIO_EXT = {
   "audio/mpeg": "mp3",
 };
 
+// 예시 문장을 prompt로 주지 않는다 - 소리가 약하면 Whisper가 예시를 그대로 "인식 결과"로 내놓는다.
+// 대신 확신도(logprob)를 받아 낮으면 무음/환각으로 처리한다.
 async function transcribeWith(model, audioBuffer, mimeType) {
   const form = new FormData();
   form.append("file", new Blob([audioBuffer], { type: mimeType }), `question.${AUDIO_EXT[mimeType] || "mp4"}`);
   form.append("model", model);
   form.append("language", "en");
-  form.append(
-    "prompt",
-    "An OPIc English speaking test. The examiner asks a question such as: I'd like to know about the place where you live. Tell me about a memorable experience. How has this changed compared to the past?"
-  );
+  if (model === "whisper-1") {
+    form.append("response_format", "verbose_json");
+  } else {
+    form.append("response_format", "json");
+    form.append("include[]", "logprobs");
+  }
 
   const res = await fetch("https://api.openai.com/v1/audio/transcriptions", {
     method: "POST",
@@ -191,8 +195,20 @@ async function transcribeWith(model, audioBuffer, mimeType) {
     throw err;
   }
   const data = await res.json();
-  return (data.text || "").trim();
+  const text = (data.text || "").trim();
+
+  let confidence = null; // 평균 logprob: 0에 가까울수록 확신, -1 아래면 의심
+  if (Array.isArray(data.logprobs) && data.logprobs.length) {
+    confidence = data.logprobs.reduce((s, t) => s + (t.logprob || 0), 0) / data.logprobs.length;
+  } else if (Array.isArray(data.segments) && data.segments.length) {
+    confidence = data.segments.reduce((s, g) => s + (g.avg_logprob || 0), 0) / data.segments.length;
+    const noSpeech = data.segments.reduce((s, g) => s + (g.no_speech_prob || 0), 0) / data.segments.length;
+    if (noSpeech > 0.6) confidence = -9; // 사실상 무음
+  }
+  return { text, confidence };
 }
+
+const MIN_CONFIDENCE = -1.0;
 
 // Whisper는 무음/잡음 녹음에 대해 그럴듯한 문장을 지어낸다. 흔한 환각 문구와 너무 짧은 인식은 버린다.
 const HALLUCINATION_PATTERNS = [
@@ -201,6 +217,7 @@ const HALLUCINATION_PATTERNS = [
   /see you (next time|in the next)/i,
   /^(bye|okay|ok|um|uh|hmm|yeah|yes|no)[.!]?$/i,
   /what (do )?you wan(t|na) (to )?do today/i,
+  /the place where you live\. tell me about a memorable experience\. how has this changed/i,
 ];
 
 function looksLikeHallucination(text) {
@@ -212,13 +229,17 @@ function looksLikeHallucination(text) {
 // 최신 모델을 먼저 쓰고, 형식/모델 문제로 거부되면 가장 호환성 높은 whisper-1로 재시도.
 // 키 오류(401)나 한도 초과(429)는 재시도해도 같으므로 바로 올린다.
 async function transcribe(audioBuffer, mimeType) {
+  let result;
   try {
-    return await transcribeWith("gpt-4o-mini-transcribe", audioBuffer, mimeType);
+    result = await transcribeWith("gpt-4o-mini-transcribe", audioBuffer, mimeType);
   } catch (err) {
     if (err.status === 401 || err.status === 429) throw err;
     console.warn("gpt-4o-mini-transcribe 실패, whisper-1로 재시도:", err.status, err.detail || err.message);
-    return await transcribeWith("whisper-1", audioBuffer, mimeType);
+    result = await transcribeWith("whisper-1", audioBuffer, mimeType);
   }
+  console.log(`인식 확신도: ${result.confidence === null ? "n/a" : result.confidence.toFixed(2)}`);
+  if (result.confidence !== null && result.confidence < MIN_CONFIDENCE) return "";
+  return result.text;
 }
 
 // ---------- 답변 생성 (Claude, 문장 단위 스트리밍) ----------
