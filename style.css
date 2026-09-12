@@ -166,6 +166,15 @@ html.flip .split {
   color: var(--muted);
 }
 
+.question-text {
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: var(--muted);
+  opacity: 0.8;
+  max-width: 640px;
+}
+
 @media (max-width: 480px) {
   .sentence-text {
     font-size: 1.19rem;

@@ -7,6 +7,7 @@
 const express = require("express");
 const AnthropicSDK = require("@anthropic-ai/sdk");
 const path = require("path");
+const SELF_INTRO = require("./self-intro.json");
 
 const Anthropic = AnthropicSDK.default || AnthropicSDK;
 
@@ -203,7 +204,11 @@ const anthropic = process.env.ANTHROPIC_API_KEY ? new Anthropic() : null;
 
 const ANSWER_SYSTEM_PROMPT = `You are an expert OPIc (Oral Proficiency Interview - computer) coach. Given the examiner's question, you write the model answer that would earn an Advanced High (AH) to Superior (S) rating on the ACTFL scale.
 
-The question was transcribed from audio by speech recognition, so it may contain small errors or cut-off words. Infer the intended question and answer that.
+The question was transcribed from audio by speech recognition, so it may contain small errors or cut-off words. Infer the intended question from the recognizable words and answer that.
+
+Two special cases - check them first:
+- If the question explicitly asks the speaker to introduce themselves (e.g. "tell me about yourself", "introduce yourself"), output exactly the single line SELF_INTRO and nothing else.
+- If the transcription is too garbled or too short to tell what topic is being asked about, output exactly the single line UNCLEAR and nothing else. Never fill the gap with a self-introduction or a generic answer about the speaker's life - an answer to the wrong question is worse than no answer.
 
 The answer is a spoken monologue that a Korean test taker will hear one sentence at a time and repeat out loud, so every sentence has to stand on its own and be comfortable to say after hearing it once.
 
@@ -262,9 +267,28 @@ app.post("/api/answer", express.raw({ type: () => true, limit: "25mb" }), async 
   res.setHeader("X-Accel-Buffering", "no");
   res.write(JSON.stringify({ question }) + "\n");
 
+  const sendSelfIntro = () => {
+    for (const s of SELF_INTRO) res.write(JSON.stringify({ sentence: s }) + "\n");
+    res.write(JSON.stringify({ done: true }) + "\n");
+    res.end();
+  };
+
+  // 자기소개 질문은 생성하지 않고 고정 템플릿을 쓴다 (모델 호출 전에 먼저 판별)
+  if (/\b(introduce yourself|introduce myself|about yourself|tell me about you\b)/i.test(question)) {
+    return sendSelfIntro();
+  }
+
+  // 모델이 첫 줄에 특수 표시(SELF_INTRO / UNCLEAR)를 내면 그에 맞게 처리한다
+  let firstLineSeen = false;
   const writeSentence = (line) => {
     const s = line.trim();
-    if (s) res.write(JSON.stringify({ sentence: s }) + "\n");
+    if (!s) return;
+    if (!firstLineSeen) {
+      firstLineSeen = true;
+      if (s === "SELF_INTRO") return "self_intro";
+      if (s === "UNCLEAR") return "unclear";
+    }
+    res.write(JSON.stringify({ sentence: s }) + "\n");
   };
 
   try {
@@ -292,17 +316,26 @@ app.post("/api/answer", express.raw({ type: () => true, limit: "25mb" }), async 
     });
 
     let buffer = "";
+    let special = null;
     for await (const event of stream) {
       if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
         buffer += event.delta.text;
         let idx;
         while ((idx = buffer.indexOf("\n")) >= 0) {
-          writeSentence(buffer.slice(0, idx));
+          special = writeSentence(buffer.slice(0, idx)) || special;
           buffer = buffer.slice(idx + 1);
         }
       }
+      if (special) break;
     }
-    writeSentence(buffer);
+    if (!special) special = writeSentence(buffer) || null;
+
+    if (special === "self_intro") return sendSelfIntro();
+    if (special === "unclear") {
+      console.log("질문 불명확 → 다시 듣기 요청");
+      res.write(JSON.stringify({ error: "unclear" }) + "\n");
+      return res.end();
+    }
     res.write(JSON.stringify({ done: true }) + "\n");
   } catch (err) {
     console.error("답변 생성 실패:", err && err.message);

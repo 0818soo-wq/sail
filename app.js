@@ -7,6 +7,7 @@ const answerStatus = document.getElementById("answer-status");
 const sentenceText = document.getElementById("sentence-text");
 const contextText = document.getElementById("context-text");
 const progressText = document.getElementById("progress-text");
+const questionText = document.getElementById("question-text");
 
 const supportsMic = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
 
@@ -167,6 +168,7 @@ function currentChunks() {
 
 const ERROR_MESSAGES = {
   no_speech: "질문이 들리지 않았어요",
+  unclear: "질문을 알아듣지 못했어요 · 다시 들려주세요",
   transcription_failed: "음성 인식 서버 오류",
   generation_failed: "답변을 만들지 못했어요",
   "empty audio": "녹음된 소리가 없어요 · 마이크 권한을 확인하세요",
@@ -207,6 +209,8 @@ function render() {
   contextText.textContent = "";
   answerStatus.textContent = "";
   progressText.textContent = "";
+  // 인식된 질문을 작게 보여줘서 엉뚱한 질문으로 답하고 있는지 바로 알 수 있게 한다
+  questionText.textContent = session.question && phase !== "LISTENING" ? `Q: ${session.question}` : "";
 
   switch (phase) {
     case "IDLE":
@@ -317,7 +321,10 @@ async function submitQuestion() {
 
   const handleLine = (msg) => {
     if (msg.error) throw new Error(describeFailure(msg));
-    if (msg.question) session.question = msg.question;
+    if (msg.question) {
+      session.question = msg.question;
+      render();
+    }
     if (msg.sentence) {
       session.sentences.push(msg.sentence);
       onSentencesUpdated();
