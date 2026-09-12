@@ -33,8 +33,38 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
+// 워치 -> 폰 리모컨: 워치 페이지의 버튼이 명령을 보내면, 폰 앱이 SSE로 받아 실행한다
+const controlClients = new Set();
+
+function sendControl(cmd) {
+  const payload = `data: ${JSON.stringify({ cmd, ts: Date.now() })}\n\n`;
+  for (const res of controlClients) res.write(payload);
+}
+
+app.get("/api/control/stream", (req, res) => {
+  res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders();
+  res.write(": connected\n\n");
+  controlClients.add(res);
+  const keepAlive = setInterval(() => res.write(": ping\n\n"), 25000);
+  req.on("close", () => {
+    clearInterval(keepAlive);
+    controlClients.delete(res);
+  });
+});
+
 app.get("/watch", (req, res) => {
   const flip = req.query.flip === "1";
+  const suffix = flip ? "?flip=1" : "";
+
+  if (req.query.cmd === "listen" || req.query.cmd === "next") {
+    sendControl(req.query.cmd);
+    return res.redirect(302, `/watch${suffix}`);
+  }
+
   res.setHeader("Content-Type", "text/html; charset=utf-8");
   res.setHeader("Cache-Control", "no-store");
   res.send(`<!DOCTYPE html>
@@ -45,15 +75,24 @@ app.get("/watch", (req, res) => {
 <meta http-equiv="refresh" content="1">
 <title>OPIc</title>
 <style>
-  body { margin: 0; padding: 10px 12px; background: #000; color: #fff;
+  body { margin: 0; padding: 10px 12px 14px; background: #000; color: #fff;
     font-family: -apple-system, "Apple SD Gothic Neo", sans-serif; ${flip ? "transform: rotate(180deg);" : ""} }
   .s { margin: 0 0 6px; font-size: 12px; color: #8f8ff8; }
-  .t { margin: 0; font-size: 22px; line-height: 1.3; font-weight: 700; }
+  .t { margin: 0 0 14px; font-size: 22px; line-height: 1.3; font-weight: 700; min-height: 1.3em; }
+  .btns { display: flex; gap: 8px; }
+  .btn { flex: 1; display: block; padding: 14px 0; border-radius: 12px; text-align: center;
+    font-size: 16px; font-weight: 700; color: #fff; text-decoration: none; }
+  .listen { background: #3b3b8f; }
+  .next { background: #4f46e5; }
 </style>
 </head>
 <body>
 <p class="s">${escapeHtml(current.title)}</p>
 <p class="t">${escapeHtml(current.text)}</p>
+<div class="btns">
+  <a class="btn listen" href="/watch?cmd=listen${flip ? "&flip=1" : ""}">🎧 듣기</a>
+  <a class="btn next" href="/watch?cmd=next${flip ? "&flip=1" : ""}">▶ 다음</a>
+</div>
 </body>
 </html>`);
 });

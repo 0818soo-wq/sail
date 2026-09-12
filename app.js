@@ -498,6 +498,30 @@ answerZone.addEventListener("keydown", (e) => {
   }
 });
 
+// 워치 리모컨: /watch 페이지의 [듣기]/[다음] 버튼이 보낸 명령을 받아 폰에서 실행한다.
+// iOS는 최초 한 번은 폰 화면을 직접 터치해야 소리를 낼 수 있으므로, 그 전에는 안내만 띄운다.
+function handleRemote(cmd) {
+  if (!gestureUnlocked) {
+    listenStatus.textContent = "워치 리모컨을 쓰려면 폰 화면을 한 번 터치하세요";
+    return;
+  }
+  if (cmd === "listen") {
+    startListening();
+  } else if (cmd === "next") {
+    if (session.phase === "LISTENING") submitQuestion();
+    else if (session.phase === "S_PLAYING" || session.phase === "S_WAIT") advance();
+  }
+}
+
+if ("EventSource" in window) {
+  const control = new EventSource("/api/control/stream");
+  control.onmessage = (e) => {
+    try {
+      handleRemote(JSON.parse(e.data).cmd);
+    } catch {}
+  };
+}
+
 // 홈 화면 설치용 서비스워커. 예전 버전이 만들어둔 알림 구독이 남아 있으면 해제한다.
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker
