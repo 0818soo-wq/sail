@@ -1,27 +1,19 @@
 :root {
   color-scheme: light dark;
   --bg: #f6f7fb;
-  --card-bg: #ffffff;
   --text: #1f2430;
   --muted: #6b7280;
   --primary: #4f46e5;
-  --primary-hover: #4338ca;
   --border: #e2e4ea;
-  --accent-bg: #eef0fe;
-  --done: #9aa0ad;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
     --bg: #14161c;
-    --card-bg: #1d2029;
     --text: #eceef4;
     --muted: #9aa0ad;
     --primary: #7c7cf5;
-    --primary-hover: #9191f7;
     --border: #2b2f3a;
-    --accent-bg: #23263a;
-    --done: #565c6a;
   }
 }
 
@@ -30,7 +22,8 @@
   -webkit-tap-highlight-color: transparent;
 }
 
-html, body {
+html,
+body {
   height: 100%;
 }
 
@@ -38,228 +31,115 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font-family: "Apple SD Gothic Neo", "Malgun Gothic", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family: "Apple SD Gothic Neo", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   overscroll-behavior: none;
 }
 
 .screen {
-  min-height: 100vh;
-}
-
-/* ---------- 주제 선택 화면 ---------- */
-#screen-topics {
-  max-width: 860px;
-  margin: 0 auto;
-  padding: 32px 20px 60px;
-}
-
-.topics-header h1 {
-  font-size: 1.6rem;
-  margin: 0 0 6px;
-}
-
-.subtitle {
-  color: var(--muted);
-  margin: 0 0 20px;
-}
-
-.watch-notify-row {
+  min-height: 100dvh;
   display: flex;
+  flex-direction: column;
+}
+
+/* ---------- 홈 ---------- */
+.home-screen {
   align-items: center;
-  gap: 10px;
-  margin-bottom: 16px;
-  flex-wrap: wrap;
+  justify-content: center;
+  gap: 40px;
+  padding: 40px 24px;
 }
 
-.secondary-btn {
-  padding: 9px 16px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: var(--card-bg);
-  color: var(--text);
-  font-size: 0.9rem;
-  font-weight: 600;
-  cursor: pointer;
+.home-title {
+  margin: 0;
+  font-size: 2.4rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: var(--muted);
 }
 
-.secondary-btn:hover {
-  border-color: var(--primary);
-  color: var(--primary);
-}
-
-.secondary-btn.active {
+.start-btn {
+  width: 220px;
+  height: 220px;
+  border-radius: 50%;
+  border: none;
   background: var(--primary);
-  border-color: var(--primary);
   color: #fff;
-}
-
-.watch-notify-status {
-  font-size: 0.82rem;
-  color: var(--muted);
-}
-
-.personalize {
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 10px 14px;
-  margin-bottom: 22px;
-  background: var(--accent-bg);
-}
-
-.personalize summary {
-  cursor: pointer;
-  font-size: 0.9rem;
-  color: var(--muted);
-}
-
-.personalize[open] summary {
-  margin-bottom: 10px;
-}
-
-.control-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 16px;
-}
-
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  flex: 1 1 160px;
-  min-width: 0;
-}
-
-.field label {
-  font-size: 0.85rem;
-  color: var(--muted);
-}
-
-input[type="text"] {
-  padding: 10px 12px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--bg);
-  color: var(--text);
-  font-size: 0.95rem;
-  width: 100%;
-}
-
-.topic-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 14px;
-}
-
-.topic-card {
-  background: var(--card-bg);
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 22px 18px;
-  font-size: 1.05rem;
-  font-weight: 600;
-  text-align: center;
-  cursor: pointer;
-  color: var(--text);
-}
-
-.topic-card:hover {
-  border-color: var(--primary);
-  color: var(--primary);
-}
-
-.topic-card:active {
-  transform: scale(0.97);
-}
-
-/* ---------- 원버튼 연습 화면 ---------- */
-.practice-screen {
-  display: flex;
-  flex-direction: column;
-}
-
-.back-btn {
-  position: absolute;
-  top: 16px;
-  left: 16px;
-  z-index: 5;
-  background: var(--card-bg);
-  border: 1px solid var(--border);
-  color: var(--muted);
-  padding: 8px 14px;
-  border-radius: 999px;
-  font-size: 0.85rem;
+  font-size: 1.8rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
   cursor: pointer;
 }
 
-.progress-bar {
-  text-align: center;
-  padding: 14px 16px 0;
-  color: var(--muted);
-  font-size: 0.85rem;
+.start-btn:active {
+  transform: scale(0.96);
+}
+
+.start-btn:disabled {
+  opacity: 0.5;
+}
+
+.home-note {
+  margin: 0;
   min-height: 20px;
+  font-size: 0.85rem;
+  color: var(--muted);
 }
 
+/* ---------- 연습 ---------- */
 .tap-area {
   flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 22px;
-  padding: 30px 24px 50px;
+  gap: 24px;
+  padding: 40px 28px;
   cursor: pointer;
   user-select: none;
   text-align: center;
 }
 
-.hint-text {
+.status-text {
   margin: 0;
-  color: var(--primary);
+  min-height: 24px;
   font-size: 1rem;
   font-weight: 600;
-  letter-spacing: 0.02em;
+  color: var(--muted);
 }
 
-.main-text {
+.sentence-text {
   margin: 0;
-  font-size: 1.5rem;
-  line-height: 1.55;
+  font-size: 1.7rem;
+  line-height: 1.5;
   font-weight: 600;
   max-width: 640px;
 }
 
-.sentence-list {
-  max-width: 640px;
+.bottom-bar {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-top: 10px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px calc(14px + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--border);
 }
 
-.sentence-list .s-line {
-  font-size: 0.92rem;
-  line-height: 1.5;
-  color: var(--done);
-  transition: color 0.2s ease;
-}
-
-.sentence-list .s-line.current {
-  color: var(--text);
-  font-weight: 700;
-}
-
-.sentence-list .s-line.upcoming {
+.progress-text {
+  font-size: 0.85rem;
   color: var(--muted);
-  opacity: 0.55;
+}
+
+.exit-btn {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  padding: 7px 16px;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  cursor: pointer;
 }
 
 @media (max-width: 480px) {
-  #screen-topics {
-    padding: 20px 14px 40px;
-  }
-
-  .main-text {
-    font-size: 1.25rem;
+  .sentence-text {
+    font-size: 1.45rem;
   }
 }

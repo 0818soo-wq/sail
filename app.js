@@ -1,43 +1,46 @@
-import { TOPICS, QTYPE_LABELS, DEFAULTS } from "./data.js";
+import { TOPICS, DEFAULTS } from "./data.js";
+import { PROFILE, profileSummary } from "./profile.js";
 
-const screenTopics = document.getElementById("screen-topics");
+const screenHome = document.getElementById("screen-home");
 const screenPractice = document.getElementById("screen-practice");
-const topicGrid = document.getElementById("topic-grid");
-const nameInput = document.getElementById("name-input");
-const jobInput = document.getElementById("job-input");
-const cityInput = document.getElementById("city-input");
-const backBtn = document.getElementById("back-btn");
-const progressText = document.getElementById("progress-text");
+const startBtn = document.getElementById("start-btn");
+const homeNote = document.getElementById("home-note");
 const tapArea = document.getElementById("tap-area");
-const hintText = document.getElementById("hint-text");
-const mainText = document.getElementById("main-text");
-const sentenceList = document.getElementById("sentence-list");
-const watchNotifyBtn = document.getElementById("watch-notify-btn");
-const watchNotifyStatus = document.getElementById("watch-notify-status");
+const statusText = document.getElementById("status-text");
+const sentenceText = document.getElementById("sentence-text");
+const progressText = document.getElementById("progress-text");
+const exitBtn = document.getElementById("exit-btn");
 
 const supportsTTS = "speechSynthesis" in window;
+const supportsPush = "serviceWorker" in navigator && "PushManager" in window;
+
 let englishVoice = null;
 let audioCtx = null;
 let pushEnabled = false;
 
-// ---------- 주제 목록 렌더링 ----------
-Object.entries(TOPICS).forEach(([topicId, topic]) => {
-  const card = document.createElement("div");
-  card.className = "topic-card";
-  card.textContent = topic.label;
-  card.addEventListener("click", () => startTopic(topicId));
-  topicGrid.appendChild(card);
-});
+// ---------- TTS ----------
+// 기기에 설치된 영어 음성 중 가장 자연스러운 것을 고른다.
+// (iOS의 Premium/Enhanced, Chrome의 Google 음성이 기본 compact 음성보다 훨씬 낫다)
+function voiceScore(voice) {
+  const name = (voice.name || "").toLowerCase();
+  let score = 0;
+  if (name.includes("premium")) score += 100;
+  if (name.includes("enhanced")) score += 90;
+  if (name.includes("neural") || name.includes("natural")) score += 80;
+  if (name.includes("siri")) score += 70;
+  if (name.includes("google")) score += 60;
+  if (!voice.localService) score += 30;
+  if (voice.lang === "en-US") score += 10;
+  return score;
+}
 
-// ---------- TTS 음성 선택 ----------
 function pickEnglishVoice() {
   if (!supportsTTS) return;
-  const voices = window.speechSynthesis.getVoices();
-  englishVoice =
-    voices.find((v) => v.lang === "en-US") ||
-    voices.find((v) => v.lang && v.lang.startsWith("en")) ||
-    voices[0] ||
-    null;
+  const voices = window.speechSynthesis
+    .getVoices()
+    .filter((v) => v.lang && v.lang.toLowerCase().startsWith("en"));
+  if (!voices.length) return;
+  englishVoice = voices.slice().sort((a, b) => voiceScore(b) - voiceScore(a))[0];
 }
 if (supportsTTS) {
   pickEnglishVoice();
@@ -53,7 +56,7 @@ function speak(text, onend) {
   const utterance = new SpeechSynthesisUtterance(text);
   if (englishVoice) utterance.voice = englishVoice;
   utterance.lang = "en-US";
-  utterance.rate = 0.92;
+  utterance.rate = 0.82;
   utterance.onend = () => onend && onend();
   utterance.onerror = () => onend && onend();
   window.speechSynthesis.speak(utterance);
@@ -95,9 +98,6 @@ function playChime(onend) {
 }
 
 // ---------- 워치 알림 (Web Push) ----------
-// 문장이 바뀔 때마다 서버로 알림 발송을 요청 -> 아이폰 알림 -> 애플워치로 자동 미러링
-const supportsPush = "serviceWorker" in navigator && "PushManager" in window;
-
 function urlBase64ToUint8Array(base64String) {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
   const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
@@ -105,52 +105,16 @@ function urlBase64ToUint8Array(base64String) {
   return Uint8Array.from([...rawData].map((c) => c.charCodeAt(0)));
 }
 
-function setWatchStatus(text) {
-  watchNotifyStatus.textContent = text;
-}
-
-async function registerServiceWorker() {
-  if (!supportsPush) return null;
-  try {
-    return await navigator.serviceWorker.register("sw.js");
-  } catch (e) {
-    console.error("서비스워커 등록 실패:", e);
-    return null;
-  }
-}
-
-async function checkExistingSubscription() {
-  if (!supportsPush) return;
-  const reg = await navigator.serviceWorker.ready;
-  const sub = await reg.pushManager.getSubscription();
-  pushEnabled = !!sub;
-  updateWatchButton();
-}
-
-function updateWatchButton() {
-  if (!supportsPush) {
-    watchNotifyBtn.disabled = true;
-    setWatchStatus("이 브라우저/환경은 웹 푸시를 지원하지 않아요.");
-    return;
-  }
-  watchNotifyBtn.classList.toggle("active", pushEnabled);
-  watchNotifyBtn.textContent = pushEnabled ? "🔔 워치 알림 켜짐" : "🔔 워치 알림 켜기";
-  setWatchStatus(pushEnabled ? "질문/문장이 바뀔 때마다 알림이 갑니다." : "");
-}
-
 async function enablePush() {
-  const reg = await registerServiceWorker();
-  if (!reg) {
-    setWatchStatus("서비스워커 등록에 실패했어요.");
-    return;
-  }
+  if (!supportsPush) return false;
+  const reg = await navigator.serviceWorker.register("sw.js");
+  const existing = await reg.pushManager.getSubscription();
+  if (existing) return true;
+
   const permission = await Notification.requestPermission();
-  if (permission !== "granted") {
-    setWatchStatus("알림 권한이 거부되었어요.");
-    return;
-  }
-  const res = await fetch("/api/vapid-public-key");
-  const { publicKey } = await res.json();
+  if (permission !== "granted") return false;
+
+  const { publicKey } = await (await fetch("/api/vapid-public-key")).json();
   const sub = await reg.pushManager.subscribe({
     userVisibleOnly: true,
     applicationServerKey: urlBase64ToUint8Array(publicKey),
@@ -160,39 +124,10 @@ async function enablePush() {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(sub),
   });
-  pushEnabled = true;
-  updateWatchButton();
+  return true;
 }
 
-async function disablePush() {
-  const reg = await navigator.serviceWorker.ready;
-  const sub = await reg.pushManager.getSubscription();
-  if (sub) {
-    await fetch("/api/unsubscribe", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ endpoint: sub.endpoint }),
-    });
-    await sub.unsubscribe();
-  }
-  pushEnabled = false;
-  updateWatchButton();
-}
-
-watchNotifyBtn.addEventListener("click", async () => {
-  watchNotifyBtn.disabled = true;
-  try {
-    if (pushEnabled) await disablePush();
-    else await enablePush();
-  } catch (e) {
-    console.error(e);
-    setWatchStatus("알림 설정 중 오류가 발생했어요.");
-  } finally {
-    watchNotifyBtn.disabled = !supportsPush ? true : false;
-  }
-});
-
-function pushNotify(title, body) {
+function pushToWatch(title, body) {
   if (!pushEnabled) return;
   fetch("/api/notify", {
     method: "POST",
@@ -201,202 +136,199 @@ function pushNotify(title, body) {
   }).catch(() => {});
 }
 
-if (supportsPush) {
-  registerServiceWorker().then(() => checkExistingSubscription());
-} else {
-  updateWatchButton();
-}
-
-// ---------- 세션 상태 ----------
-let session = null;
-/*
-session = {
-  topicId, inputs: {name, job, city},
-  items: [{ qType, question, sentences }],
-  itemIndex, sentenceIndex,
-  phase: 'Q_READY' | 'Q_PLAYING' | 'A_READY' | 'A_GENERATING' | 'S_READY' | 'S_PLAYING' | 'ITEM_DONE' | 'SESSION_DONE'
-}
-*/
-
-function fillPlaceholders(text, inputs) {
+// ---------- 문항 큐 ----------
+function fillPlaceholders(text) {
   return text
-    .replaceAll("{name}", inputs.name)
-    .replaceAll("{job}", inputs.job)
-    .replaceAll("{city}", inputs.city);
+    .replaceAll("{name}", PROFILE.englishName || DEFAULTS.name)
+    .replaceAll("{job}", PROFILE.job || DEFAULTS.job)
+    .replaceAll("{city}", PROFILE.city || DEFAULTS.city);
 }
 
-function startTopic(topicId) {
-  const topic = TOPICS[topicId];
-  const inputs = {
-    name: nameInput.value.trim() || DEFAULTS.name,
-    job: jobInput.value.trim() || DEFAULTS.job,
-    city: cityInput.value.trim() || DEFAULTS.city,
-  };
-
-  const items = Object.entries(topic.items).map(([qType, item]) => ({
-    qType,
-    question: fillPlaceholders(item.question, inputs),
-    sentences: item.sentences.map((s) => fillPlaceholders(s, inputs)),
-  }));
-
-  session = {
-    topicId,
-    topicLabel: topic.label,
-    inputs,
-    items,
-    itemIndex: 0,
-    sentenceIndex: 0,
-    phase: "Q_READY",
-  };
-
-  screenTopics.hidden = true;
-  screenPractice.hidden = false;
-  renderPractice();
+function buildQueue() {
+  const items = [];
+  for (const [topicId, topic] of Object.entries(TOPICS)) {
+    for (const [qType, item] of Object.entries(topic.items)) {
+      items.push({
+        topicId,
+        topicLabel: topic.label,
+        qType,
+        question: fillPlaceholders(item.question),
+        fallback: item.sentences.map(fillPlaceholders),
+      });
+    }
+  }
+  for (let i = items.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [items[i], items[j]] = [items[j], items[i]];
+  }
+  return items;
 }
 
-function goBackToTopics() {
-  window.speechSynthesis && window.speechSynthesis.cancel();
-  session = null;
-  screenPractice.hidden = true;
-  screenTopics.hidden = false;
+// 답변 프리페치: 질문을 듣는 동안 다음 답변을 미리 만들어 대기시간을 없앤다
+const answerCache = new Map();
+
+function prefetchAnswer(index) {
+  if (!session || index >= session.queue.length || answerCache.has(index)) return;
+  const item = session.queue[index];
+  const request = fetch("/api/generate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      question: item.question,
+      topic: item.topicLabel,
+      profile: profileSummary(),
+    }),
+  })
+    .then((r) => (r.ok ? r.json() : Promise.reject(new Error("generate failed"))))
+    .then((d) => (Array.isArray(d.sentences) && d.sentences.length ? d.sentences : item.fallback))
+    .catch(() => item.fallback);
+  answerCache.set(index, request);
 }
 
-function currentItem() {
-  return session.items[session.itemIndex];
-}
+// ---------- 세션 ----------
+let session = null;
+// phase: Q_PLAYING | Q_DONE | LOADING | S_PLAYING | S_WAIT | ITEM_DONE
 
-function renderPractice() {
-  const item = currentItem();
-  const total = session.items.length;
-  const qTypeLabel = QTYPE_LABELS[item.qType] || "";
+function render() {
+  if (!session) return;
+  const { phase, sentences, sentenceIndex } = session;
 
-  progressText.textContent = `${session.topicLabel} · 문항 ${session.itemIndex + 1}/${total} (${qTypeLabel})`;
-
-  switch (session.phase) {
-    case "Q_READY":
-      hintText.textContent = "터치해서 질문 듣기";
-      mainText.textContent = item.question;
-      sentenceList.innerHTML = "";
-      break;
+  switch (phase) {
     case "Q_PLAYING":
-      hintText.textContent = "질문 재생 중...";
-      mainText.textContent = item.question;
-      sentenceList.innerHTML = "";
+      statusText.textContent = "🎧 질문 듣는 중";
+      sentenceText.textContent = "";
+      progressText.textContent = "";
       break;
-    case "A_READY":
-      hintText.textContent = "터치해서 답변 생성하기";
-      mainText.textContent = "";
-      sentenceList.innerHTML = "";
+    case "Q_DONE":
+      statusText.textContent = "화면을 터치하세요";
+      sentenceText.textContent = "";
       break;
-    case "A_GENERATING":
-      hintText.textContent = "";
-      mainText.textContent = "답변 생성 중...";
-      sentenceList.innerHTML = "";
+    case "LOADING":
+      statusText.textContent = "답변 준비 중...";
+      sentenceText.textContent = "";
       break;
-    case "S_READY":
     case "S_PLAYING":
-      hintText.textContent =
-        session.phase === "S_READY" ? "터치해서 다음 문장 듣기" : "재생 중... 따라 말해보세요";
-      mainText.textContent = "";
-      renderSentenceList(item.sentences, session.sentenceIndex);
+    case "S_WAIT":
+      statusText.textContent = phase === "S_PLAYING" ? "" : "따라 말한 뒤 터치";
+      sentenceText.textContent = sentences[sentenceIndex];
+      progressText.textContent = `${sentenceIndex + 1} / ${sentences.length}`;
       break;
     case "ITEM_DONE":
-      hintText.textContent =
-        session.itemIndex + 1 < total ? "터치해서 다음 질문으로" : "터치해서 완료";
-      mainText.textContent = "✅ 답변 완료!";
-      renderSentenceList(item.sentences, item.sentences.length);
-      break;
-    case "SESSION_DONE":
-      hintText.textContent = "터치해서 주제 선택으로";
-      mainText.textContent = "🎉 이 주제를 모두 마쳤습니다!";
-      sentenceList.innerHTML = "";
+      statusText.textContent = "터치하면 다음 질문";
+      sentenceText.textContent = "";
+      progressText.textContent = "";
       break;
   }
 }
 
-function renderSentenceList(sentences, activeIndex) {
-  sentenceList.innerHTML = "";
-  sentences.forEach((s, i) => {
-    const p = document.createElement("p");
-    p.className = "s-line";
-    if (i < activeIndex) p.classList.add("done");
-    else if (i === activeIndex) p.classList.add("current");
-    else p.classList.add("upcoming");
-    p.textContent = s;
-    sentenceList.appendChild(p);
+function playQuestion() {
+  const item = session.queue[session.index];
+  session.phase = "Q_PLAYING";
+  render();
+  prefetchAnswer(session.index);
+  prefetchAnswer(session.index + 1);
+  speak(item.question, () => {
+    if (!session || session.phase !== "Q_PLAYING") return;
+    session.phase = "Q_DONE";
+    render();
+  });
+}
+
+async function startAnswer() {
+  session.phase = "LOADING";
+  render();
+  const index = session.index;
+  prefetchAnswer(index);
+  const sentences = await answerCache.get(index);
+  if (!session || session.index !== index) return;
+  session.sentences = sentences;
+  session.sentenceIndex = 0;
+  playSentence();
+}
+
+function playSentence() {
+  const { sentences, sentenceIndex } = session;
+  session.phase = "S_PLAYING";
+  render();
+  pushToWatch(`${sentenceIndex + 1} / ${sentences.length}`, sentences[sentenceIndex]);
+  speak(sentences[sentenceIndex], () => {
+    if (!session || session.phase !== "S_PLAYING") return;
+    if (sentenceIndex + 1 < sentences.length) {
+      session.phase = "S_WAIT";
+      render();
+    } else {
+      session.phase = "ITEM_DONE";
+      statusText.textContent = "";
+      sentenceText.textContent = "";
+      playChime(() => {
+        if (session && session.phase === "ITEM_DONE") render();
+      });
+    }
   });
 }
 
 function handleTap() {
   if (!session) return;
   ensureAudioCtx();
-  const item = currentItem();
 
   switch (session.phase) {
-    case "Q_READY":
-      session.phase = "Q_PLAYING";
-      renderPractice();
-      pushNotify(`❓ ${session.topicLabel} 질문`, item.question);
-      speak(item.question, () => {
-        session.phase = "A_READY";
-        renderPractice();
-      });
+    case "Q_DONE":
+      startAnswer();
       break;
-
-    case "A_READY":
-      session.phase = "A_GENERATING";
-      renderPractice();
-      setTimeout(() => {
-        session.sentenceIndex = 0;
-        session.phase = "S_READY";
-        renderPractice();
-      }, 700);
+    case "S_WAIT":
+      session.sentenceIndex += 1;
+      playSentence();
       break;
-
-    case "S_READY": {
-      session.phase = "S_PLAYING";
-      renderPractice();
-      const idx = session.sentenceIndex;
-      pushNotify(`문장 ${idx + 1}/${item.sentences.length}`, item.sentences[idx]);
-      speak(item.sentences[idx], () => {
-        if (idx + 1 < item.sentences.length) {
-          session.sentenceIndex = idx + 1;
-          session.phase = "S_READY";
-          renderPractice();
-        } else {
-          session.phase = "ITEM_DONE";
-          renderSentenceList(item.sentences, item.sentences.length);
-          hintText.textContent = "";
-          playChime(() => {
-            renderPractice();
-          });
-        }
-      });
-      break;
-    }
-
     case "ITEM_DONE":
-      if (session.itemIndex + 1 < session.items.length) {
-        session.itemIndex += 1;
-        session.sentenceIndex = 0;
-        session.phase = "Q_READY";
-      } else {
-        session.phase = "SESSION_DONE";
-        pushNotify("🎉 완료", `${session.topicLabel} 연습을 모두 마쳤습니다.`);
+      session.index += 1;
+      if (session.index >= session.queue.length) {
+        session.queue = buildQueue();
+        session.index = 0;
+        answerCache.clear();
       }
-      renderPractice();
+      playQuestion();
       break;
-
-    case "SESSION_DONE":
-      goBackToTopics();
-      break;
-
-    // Q_PLAYING, A_GENERATING, S_PLAYING: 재생/생성 중에는 탭 무시
     default:
-      break;
+      break; // 재생/로딩 중에는 탭 무시
   }
 }
 
+function start() {
+  ensureAudioCtx();
+  homeNote.textContent = "";
+
+  // 알림 권한 요청은 백그라운드로 - 시작을 막지 않는다
+  enablePush()
+    .then((ok) => {
+      pushEnabled = ok;
+    })
+    .catch(() => {
+      pushEnabled = false;
+    });
+
+  answerCache.clear();
+  session = {
+    queue: buildQueue(),
+    index: 0,
+    sentences: [],
+    sentenceIndex: 0,
+    phase: "Q_PLAYING",
+  };
+
+  screenHome.hidden = true;
+  screenPractice.hidden = false;
+  playQuestion();
+}
+
+function exitSession() {
+  if (supportsTTS) window.speechSynthesis.cancel();
+  session = null;
+  answerCache.clear();
+  screenPractice.hidden = true;
+  screenHome.hidden = false;
+}
+
+startBtn.addEventListener("click", start);
 tapArea.addEventListener("click", handleTap);
 tapArea.addEventListener("keydown", (e) => {
   if (e.key === "Enter" || e.key === " ") {
@@ -404,8 +336,11 @@ tapArea.addEventListener("keydown", (e) => {
     handleTap();
   }
 });
-
-backBtn.addEventListener("click", (e) => {
+exitBtn.addEventListener("click", (e) => {
   e.stopPropagation();
-  goBackToTopics();
+  exitSession();
 });
+
+if (supportsPush) {
+  navigator.serviceWorker.register("sw.js").catch(() => {});
+}
