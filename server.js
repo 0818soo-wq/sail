@@ -28,6 +28,36 @@ app.get("/display", (req, res) => {
   res.sendFile(path.join(__dirname, "display.html"));
 });
 
+// 애플워치 간이 브라우저용: 스크립트 없이 1초마다 새로고침되는 단순 페이지
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+app.get("/watch", (req, res) => {
+  const flip = req.query.flip === "1";
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.setHeader("Cache-Control", "no-store");
+  res.send(`<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="refresh" content="1">
+<title>OPIc</title>
+<style>
+  body { margin: 0; padding: 10px 12px; background: #000; color: #fff;
+    font-family: -apple-system, "Apple SD Gothic Neo", sans-serif; ${flip ? "transform: rotate(180deg);" : ""} }
+  .s { margin: 0 0 6px; font-size: 12px; color: #8f8ff8; }
+  .t { margin: 0; font-size: 22px; line-height: 1.3; font-weight: 700; }
+</style>
+</head>
+<body>
+<p class="s">${escapeHtml(current.title)}</p>
+<p class="t">${escapeHtml(current.text)}</p>
+</body>
+</html>`);
+});
+
 app.post("/api/current", (req, res) => {
   const { title, text } = req.body || {};
   current = { title: String(title || ""), text: String(text || ""), ts: Date.now() };
