@@ -80,27 +80,58 @@ function releaseMic() {
   recorder = null;
 }
 
-function micIsLive() {
-  return !!mediaStream && mediaStream.getAudioTracks().some((t) => t.readyState === "live");
+// 녹음 중 입력 레벨을 재서 (1) 화면에 보여주고 (2) 무음 녹음을 서버로 보내지 않게 한다
+let meter = null;
+
+function startMeter(stream) {
+  const ctx = ensureAudioCtx();
+  if (!ctx) return;
+  const source = ctx.createMediaStreamSource(stream);
+  const analyser = ctx.createAnalyser();
+  analyser.fftSize = 512;
+  source.connect(analyser);
+  const data = new Uint8Array(analyser.fftSize);
+  session.peakLevel = 0;
+  session.meterSamples = 0;
+  const timer = setInterval(() => {
+    analyser.getByteTimeDomainData(data);
+    session.meterSamples += 1;
+    let sum = 0;
+    for (const v of data) {
+      const x = (v - 128) / 128;
+      sum += x * x;
+    }
+    const rms = Math.sqrt(sum / data.length);
+    if (rms > session.peakLevel) session.peakLevel = rms;
+    if (session.phase === "LISTENING") renderLevel(rms);
+  }, 100);
+  meter = { source, timer };
 }
 
-// 마이크는 한 번 열면 세션 내내 유지한다 - 질문마다 다시 열면 iOS가 매번 권한을 물을 수 있다
-async function ensureMic() {
-  if (micIsLive()) return true;
-  releaseMic();
+function stopMeter() {
+  if (!meter) return;
+  clearInterval(meter.timer);
   try {
-    mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    return true;
-  } catch {
-    return false;
-  }
+    meter.source.disconnect();
+  } catch {}
+  meter = null;
 }
+
+function renderLevel(rms) {
+  const n = Math.min(8, Math.round(rms * 40));
+  listenStatus.textContent = `🎧 듣는 중 ${"▮".repeat(n)}${"▯".repeat(8 - n)}  · 질문이 끝나면 위를 터치`;
+}
+
+const SILENCE_PEAK = 0.015;
 
 async function startListening() {
-  if (recorder && recorder.state !== "inactive") recorder.stop();
-  recorder = null;
+  // 질문마다 마이크를 새로 연다. iOS Safari는 같은 스트림으로 두 번째 녹음을 하면 무음이 녹음된다.
+  stopMeter();
+  releaseMic();
   const token = ++session.token;
   session.phase = "LISTENING";
+  session.peakLevel = 0;
+  session.meterSamples = 0;
   render();
   updateDisplay("", "🎧 질문 듣는 중");
 
@@ -110,14 +141,21 @@ async function startListening() {
     return;
   }
 
-  const ok = await ensureMic();
-  if (session.token !== token) return;
-  if (!ok) {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    if (session.token !== token) {
+      stream.getTracks().forEach((t) => t.stop());
+      return;
+    }
+    mediaStream = stream;
+  } catch {
+    if (session.token !== token) return;
     session.phase = "MIC_ERROR";
     render();
     return;
   }
 
+  startMeter(mediaStream);
   chunks = [];
   const mimeType = pickRecorderMime();
   recorder = new MediaRecorder(mediaStream, mimeType ? { mimeType } : undefined);
@@ -127,16 +165,20 @@ async function startListening() {
   recorder.start();
 }
 
-// 녹음만 멈추고 마이크 스트림은 열어둔다
 function stopListening() {
+  stopMeter();
   return new Promise((resolve) => {
     const r = recorder;
-    recorder = null;
     if (!r || r.state === "inactive") {
+      releaseMic();
       resolve(new Blob(chunks, { type: "audio/mp4" }));
       return;
     }
-    r.onstop = () => resolve(new Blob(chunks, { type: r.mimeType || "audio/mp4" }));
+    r.onstop = () => {
+      const blob = new Blob(chunks, { type: r.mimeType || "audio/mp4" });
+      releaseMic();
+      resolve(blob);
+    };
     r.stop();
   });
 }
@@ -324,6 +366,7 @@ async function submitQuestion() {
   render();
   updateDisplay("", "답변 만드는 중...");
 
+  const peak = session.peakLevel || 0;
   const blob = await stopListening();
   if (session.token !== token) return;
 
@@ -354,7 +397,12 @@ async function submitQuestion() {
       try {
         payload = await res.json();
       } catch {}
-      throw new Error(describeFailure(payload));
+      let message = describeFailure(payload);
+      // 서버가 무음이라고 했고 이쪽 레벨 미터도 조용했다면 마이크 문제라는 힌트를 붙인다
+      if (payload.error === "no_speech" && session.meterSamples > 0 && peak < SILENCE_PEAK) {
+        message += " (마이크 입력이 거의 없었어요)";
+      }
+      throw new Error(message);
     }
 
     const reader = res.body.getReader();

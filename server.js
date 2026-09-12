@@ -194,6 +194,21 @@ async function transcribeWith(model, audioBuffer, mimeType) {
   return (data.text || "").trim();
 }
 
+// Whisper는 무음/잡음 녹음에 대해 그럴듯한 문장을 지어낸다. 흔한 환각 문구와 너무 짧은 인식은 버린다.
+const HALLUCINATION_PATTERNS = [
+  /thank(s| you) for watching/i,
+  /subscribe/i,
+  /see you (next time|in the next)/i,
+  /^(bye|okay|ok|um|uh|hmm|yeah|yes|no)[.!]?$/i,
+  /what (do )?you wan(t|na) (to )?do today/i,
+];
+
+function looksLikeHallucination(text) {
+  const words = text.split(/\s+/).filter(Boolean);
+  if (words.length < 3) return true;
+  return HALLUCINATION_PATTERNS.some((re) => re.test(text));
+}
+
 // 최신 모델을 먼저 쓰고, 형식/모델 문제로 거부되면 가장 호환성 높은 whisper-1로 재시도.
 // 키 오류(401)나 한도 초과(429)는 재시도해도 같으므로 바로 올린다.
 async function transcribe(audioBuffer, mimeType) {
@@ -266,7 +281,10 @@ app.post("/api/answer", express.raw({ type: () => true, limit: "25mb" }), async 
     });
   }
   console.log("인식된 질문:", question);
-  if (!question) return res.status(422).json({ error: "no_speech" });
+  if (!question || looksLikeHallucination(question)) {
+    console.log("무음/환각으로 판단 → 다시 듣기 요청");
+    return res.status(422).json({ error: "no_speech" });
+  }
 
   // NDJSON 스트림: {question} -> {sentence}... -> {done}
   res.setHeader("Content-Type", "application/x-ndjson; charset=utf-8");
