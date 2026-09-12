@@ -1,4 +1,4 @@
-import { TOPICS, DEFAULTS } from "./data.js";
+import { TOPICS, DEFAULTS, QUESTION_TOPICS, QUESTION_TYPES } from "./data.js";
 import { PROFILE, profileSummary } from "./profile.js";
 
 const screenHome = document.getElementById("screen-home");
@@ -144,50 +144,58 @@ function fillPlaceholders(text) {
     .replaceAll("{city}", PROFILE.city || DEFAULTS.city);
 }
 
-function buildQueue() {
-  const items = [];
-  for (const [topicId, topic] of Object.entries(TOPICS)) {
-    for (const [qType, item] of Object.entries(topic.items)) {
-      items.push({
-        topicId,
-        topicLabel: topic.label,
-        qType,
-        question: fillPlaceholders(item.question),
-        fallback: item.sentences.map(fillPlaceholders),
-      });
-    }
-  }
-  for (let i = items.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [items[i], items[j]] = [items[j], items[i]];
-  }
-  return items;
+function pickRandom(list) {
+  return list[Math.floor(Math.random() * list.length)];
 }
 
-// 답변 프리페치: 질문을 듣는 동안 다음 답변을 미리 만들어 대기시간을 없앤다
-const answerCache = new Map();
+// 생성 실패 시 쓰는 오프라인 폴백 문항
+function fallbackItem() {
+  const topics = Object.values(TOPICS);
+  const topic = pickRandom(topics);
+  const item = pickRandom(Object.values(topic.items));
+  return {
+    question: fillPlaceholders(item.question),
+    sentences: item.sentences.map(fillPlaceholders),
+  };
+}
 
-function prefetchAnswer(index) {
-  if (!session || index >= session.queue.length || answerCache.has(index)) return;
-  const item = session.queue[index];
+// 문항 프리페치: 앱을 열자마자 첫 문항을, 이후에는 한 문항씩 앞서 만들어
+// 질문을 듣는 동안 다음 준비가 끝나 있도록 한다
+const itemQueue = [];
+
+function prefetchItem() {
+  const topic = pickRandom(QUESTION_TOPICS);
+  const type = pickRandom(QUESTION_TYPES);
   const request = fetch("/api/generate", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      question: item.question,
-      topic: item.topicLabel,
+      topic,
+      questionType: type.id,
+      questionBrief: type.brief,
       profile: profileSummary(),
     }),
   })
     .then((r) => (r.ok ? r.json() : Promise.reject(new Error("generate failed"))))
-    .then((d) => (Array.isArray(d.sentences) && d.sentences.length ? d.sentences : item.fallback))
-    .catch(() => item.fallback);
-  answerCache.set(index, request);
+    .then((d) =>
+      d.question && Array.isArray(d.sentences) && d.sentences.length
+        ? { question: d.question, sentences: d.sentences }
+        : fallbackItem()
+    )
+    .catch(() => fallbackItem());
+  itemQueue.push(request);
+}
+
+function takeItem() {
+  if (!itemQueue.length) prefetchItem();
+  const next = itemQueue.shift();
+  prefetchItem(); // 항상 한 문항 앞서 준비
+  return next;
 }
 
 // ---------- 세션 ----------
 let session = null;
-// phase: Q_PLAYING | Q_DONE | LOADING | S_PLAYING | S_WAIT | ITEM_DONE
+// phase: LOADING | Q_PLAYING | Q_DONE | S_PLAYING | S_WAIT | ITEM_DONE
 
 function render() {
   if (!session) return;
@@ -204,8 +212,9 @@ function render() {
       sentenceText.textContent = "";
       break;
     case "LOADING":
-      statusText.textContent = "답변 준비 중...";
+      statusText.textContent = "문제 준비 중...";
       sentenceText.textContent = "";
+      progressText.textContent = "";
       break;
     case "S_PLAYING":
     case "S_WAIT":
@@ -221,29 +230,23 @@ function render() {
   }
 }
 
-function playQuestion() {
-  const item = session.queue[session.index];
+async function nextItem() {
+  session.phase = "LOADING";
+  render();
+
+  const token = ++session.token;
+  const item = await takeItem();
+  if (!session || session.token !== token) return;
+
+  session.sentences = item.sentences;
+  session.sentenceIndex = 0;
   session.phase = "Q_PLAYING";
   render();
-  prefetchAnswer(session.index);
-  prefetchAnswer(session.index + 1);
   speak(item.question, () => {
-    if (!session || session.phase !== "Q_PLAYING") return;
+    if (!session || session.token !== token || session.phase !== "Q_PLAYING") return;
     session.phase = "Q_DONE";
     render();
   });
-}
-
-async function startAnswer() {
-  session.phase = "LOADING";
-  render();
-  const index = session.index;
-  prefetchAnswer(index);
-  const sentences = await answerCache.get(index);
-  if (!session || session.index !== index) return;
-  session.sentences = sentences;
-  session.sentenceIndex = 0;
-  playSentence();
 }
 
 function playSentence() {
@@ -273,20 +276,14 @@ function handleTap() {
 
   switch (session.phase) {
     case "Q_DONE":
-      startAnswer();
+      playSentence();
       break;
     case "S_WAIT":
       session.sentenceIndex += 1;
       playSentence();
       break;
     case "ITEM_DONE":
-      session.index += 1;
-      if (session.index >= session.queue.length) {
-        session.queue = buildQueue();
-        session.index = 0;
-        answerCache.clear();
-      }
-      playQuestion();
+      nextItem();
       break;
     default:
       break; // 재생/로딩 중에는 탭 무시
@@ -306,24 +303,21 @@ function start() {
       pushEnabled = false;
     });
 
-  answerCache.clear();
   session = {
-    queue: buildQueue(),
-    index: 0,
+    token: 0,
     sentences: [],
     sentenceIndex: 0,
-    phase: "Q_PLAYING",
+    phase: "LOADING",
   };
 
   screenHome.hidden = true;
   screenPractice.hidden = false;
-  playQuestion();
+  nextItem();
 }
 
 function exitSession() {
   if (supportsTTS) window.speechSynthesis.cancel();
   session = null;
-  answerCache.clear();
   screenPractice.hidden = true;
   screenHome.hidden = false;
 }
@@ -344,3 +338,6 @@ exitBtn.addEventListener("click", (e) => {
 if (supportsPush) {
   navigator.serviceWorker.register("sw.js").catch(() => {});
 }
+
+// 앱을 여는 순간부터 첫 문항을 만들어둔다 - START를 누를 때는 이미 준비된 상태
+prefetchItem();

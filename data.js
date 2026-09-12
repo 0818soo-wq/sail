@@ -11,6 +11,77 @@ export const QTYPE_LABELS = {
   experience: "경험",
 };
 
+// 실전처럼 매번 새 문항을 만들기 위한 주제 / 문항 유형 풀.
+// 아래 TOPICS는 생성이 실패했을 때 쓰는 오프라인 폴백으로만 남겨둔다.
+export const QUESTION_TOPICS = [
+  "introducing yourself",
+  "the house or apartment you live in",
+  "your neighborhood",
+  "your family and who you live with",
+  "your job and what you actually do at work",
+  "the industry you work in and how it is changing",
+  "watching movies or TV shows",
+  "listening to music",
+  "going to parks",
+  "going to cafes and coffee shops",
+  "cooking and food at home",
+  "eating out at restaurants",
+  "running, walking, or working out",
+  "domestic travel in your own country",
+  "traveling abroad",
+  "planning trips and vacations",
+  "shopping",
+  "using the internet and smartphones",
+  "social media",
+  "technology changing daily life",
+  "weather and seasons",
+  "public transportation and getting around",
+  "banks and handling money",
+  "recycling and the environment",
+  "health and staying in shape",
+  "free time on weekends",
+  "meeting friends and socializing",
+  "holidays and celebrations",
+  "reading books or news",
+  "learning something new as an adult",
+];
+
+export const QUESTION_TYPES = [
+  {
+    id: "description",
+    label: "묘사",
+    brief: "Ask the speaker to describe the topic in detail - what it looks like, what makes it distinctive.",
+  },
+  {
+    id: "routine",
+    label: "습관",
+    brief: "Ask about the speaker's typical routine around the topic - how often, when, what they usually do.",
+  },
+  {
+    id: "experience",
+    label: "경험",
+    brief: "Ask for a specific memorable episode related to the topic - what happened, from beginning to end.",
+  },
+  {
+    id: "comparison",
+    label: "비교",
+    brief:
+      "Ask the speaker to compare how this was in the past versus how it is now, or to compare two things within the topic.",
+  },
+  {
+    id: "issue",
+    label: "이슈",
+    brief:
+      "Ask an abstract or opinion question about the topic - a social trend, a problem people face, or what the speaker thinks should change. This is the advanced-level question type.",
+  },
+  {
+    id: "roleplay",
+    label: "롤플레이",
+    brief:
+      "Give a short situation and have the speaker handle it out loud - asking someone questions, or explaining a problem and proposing solutions.",
+  },
+];
+
 export const DEFAULTS = {
   name: "Alex",
   job: "a graduate student",
