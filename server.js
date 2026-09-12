@@ -53,11 +53,20 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
-// 워치 -> 폰 리모컨: 워치 페이지의 버튼이 명령을 보내면, 폰 앱이 SSE로 받아 실행한다
+// 워치 -> 폰 리모컨: 워치 페이지의 버튼이 명령을 보내면, 폰 앱이 SSE로 받아 실행한다.
+// 폰이 잠깐 연결이 끊긴 사이에 온 명령은 버리지 않고 기억했다가, 다시 붙는 즉시 전달한다.
 const controlClients = new Set();
+let pendingControl = null; // { cmd, ts }
+const PENDING_TTL = 10000;
 
 function sendControl(cmd) {
-  const payload = `data: ${JSON.stringify({ cmd, ts: Date.now() })}\n\n`;
+  const msg = { cmd, ts: Date.now() };
+  const payload = `data: ${JSON.stringify(msg)}\n\n`;
+  if (controlClients.size === 0) {
+    pendingControl = msg;
+    return;
+  }
+  pendingControl = null;
   for (const res of controlClients) res.write(payload);
 }
 
@@ -76,6 +85,10 @@ app.get("/api/control/stream", (req, res) => {
   res.flushHeaders();
   res.write(": connected\n\n");
   controlClients.add(res);
+  if (pendingControl && Date.now() - pendingControl.ts < PENDING_TTL) {
+    res.write(`data: ${JSON.stringify(pendingControl)}\n\n`);
+    pendingControl = null;
+  }
   const keepAlive = setInterval(() => res.write(": ping\n\n"), 25000);
   req.on("close", () => {
     clearInterval(keepAlive);
@@ -83,22 +96,31 @@ app.get("/api/control/stream", (req, res) => {
   });
 });
 
+// 같은 명령 링크를 뒤로가기 등으로 다시 열었을 때 중복 실행되지 않도록 발급 시각(n)으로 걸러낸다
+let lastWatchCmdNonce = 0;
+
 app.get("/watch", async (req, res) => {
   const flip = req.query.flip === "1";
   const suffix = flip ? "?flip=1" : "";
+  const flipParam = flip ? "&flip=1" : "";
 
   if (req.query.cmd === "listen" || req.query.cmd === "next") {
-    const before = current.ts;
-    sendControl(req.query.cmd);
-    // 폰이 새 문장(또는 상태)을 올릴 때까지 기다렸다가 돌려보내면, 워치 화면에 바로 최신 문장이 그려진다.
-    // "다음"은 문장 사이 이동이면 즉시, 질문 인식 + 답변 생성이면 몇 초가 걸린다.
-    await waitForChange(before, req.query.cmd === "next" ? 20000 : 4000);
-    if (req.query.cmd === "next" && current.text === "답변 만드는 중...") {
-      await waitForChange(current.ts, 20000); // 첫 문장이 나올 때까지 한 번 더
+    const nonce = Number(req.query.n) || 0;
+    const fresh = nonce > lastWatchCmdNonce && Date.now() - nonce < 30000;
+    if (fresh) {
+      lastWatchCmdNonce = nonce;
+      const before = current.ts;
+      sendControl(req.query.cmd);
+      // 폰이 새 문장(또는 상태)을 올릴 때까지 기다렸다가 바로 그 화면을 그린다 (리다이렉트 없이 한 번에).
+      // "다음"은 문장 사이 이동이면 즉시, 질문 인식 + 답변 생성이면 몇 초가 걸린다.
+      await waitForChange(before, req.query.cmd === "next" ? 20000 : 4000);
+      if (req.query.cmd === "next" && current.text === "답변 만드는 중...") {
+        await waitForChange(current.ts, 20000); // 첫 문장이 나올 때까지 한 번 더
+      }
     }
-    return res.redirect(302, `/watch${suffix}`);
   }
 
+  const now = Date.now();
   res.setHeader("Content-Type", "text/html; charset=utf-8");
   res.setHeader("Cache-Control", "no-store");
   res.send(`<!DOCTYPE html>
@@ -106,7 +128,6 @@ app.get("/watch", async (req, res) => {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="refresh" content="1">
 <title>OPIc</title>
 <style>
   body { margin: 0; padding: 10px 12px 14px; background: #000; color: #fff;
@@ -125,8 +146,8 @@ app.get("/watch", async (req, res) => {
 <p class="s">${escapeHtml(current.title)}</p>
 <p class="t">${escapeHtml(current.text)}</p>
 <div class="btns">
-  <a class="btn listen" href="/watch?cmd=listen${flip ? "&flip=1" : ""}">🎧 듣기</a>
-  <a class="btn next" href="/watch?cmd=next${flip ? "&flip=1" : ""}">▶ 다음</a>
+  <a class="btn listen" href="/watch?cmd=listen&n=${now}${flipParam}">🎧 듣기</a>
+  <a class="btn next" href="/watch?cmd=next&n=${now}${flipParam}">▶ 다음</a>
 </div>
 <a class="btn reload" href="/watch${suffix}">↻ 새로고침</a>
 </body>

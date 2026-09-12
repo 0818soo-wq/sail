@@ -544,14 +544,28 @@ function handleRemote(cmd) {
   }
 }
 
-if ("EventSource" in window) {
-  const control = new EventSource("/api/control/stream");
+// 명령 수신 연결. 앱이 백그라운드에 갔다 오면 끊겨 있을 수 있으니 화면에 돌아올 때 바로 다시 붙는다.
+let control = null;
+function connectControl() {
+  if (!("EventSource" in window)) return;
+  if (control && control.readyState !== EventSource.CLOSED) return;
+  control = new EventSource("/api/control/stream");
   control.onmessage = (e) => {
     try {
       handleRemote(JSON.parse(e.data).cmd);
     } catch {}
   };
 }
+connectControl();
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") {
+    if (control) {
+      control.close();
+      control = null;
+    }
+    connectControl();
+  }
+});
 
 // 홈 화면 설치용 서비스워커. 예전 버전이 만들어둔 알림 구독이 남아 있으면 해제한다.
 if ("serviceWorker" in navigator) {
