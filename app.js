@@ -217,6 +217,20 @@ function currentChunks() {
   return chunkSentence(session.sentences[session.sentenceIndex]);
 }
 
+// 마지막 문장(총 문장 수가 확정된 뒤)에는 ☑️를 붙여 끝이 보이게 한다
+function isFinalChunk() {
+  return (
+    session.streamDone &&
+    session.sentenceIndex === session.sentences.length - 1 &&
+    session.chunkIndex === currentChunks().length - 1
+  );
+}
+
+function currentChunkText() {
+  const text = currentChunks()[session.chunkIndex];
+  return isFinalChunk() ? `${text} ☑️` : text;
+}
+
 const ERROR_MESSAGES = {
   no_speech: "질문이 들리지 않았어요",
   unclear: "질문을 알아듣지 못했어요 · 다시 들려주세요",
@@ -285,7 +299,7 @@ function render() {
     case "S_WAIT": {
       const chunks = currentChunks();
       listenStatus.textContent = "다음 질문은 여기 터치";
-      sentenceText.textContent = chunks[chunkIndex];
+      sentenceText.textContent = currentChunkText();
       if (chunks.length > 1) renderContext(chunks, chunkIndex);
       answerStatus.textContent = "읽은 뒤 터치";
       progressText.textContent =
@@ -321,7 +335,7 @@ function playChunk() {
   session.phase = "S_WAIT";
   render();
   const sentenceLabel = `${si + 1}${session.streamDone ? ` / ${session.sentences.length}` : ""}`;
-  updateDisplay(chunks.length > 1 ? `${sentenceLabel} · ${ci + 1}/${chunks.length}` : sentenceLabel, chunks[ci]);
+  updateDisplay(chunks.length > 1 ? `${sentenceLabel} · ${ci + 1}/${chunks.length}` : sentenceLabel, currentChunkText());
 }
 
 function finishItem() {
@@ -359,7 +373,8 @@ function onSentencesUpdated() {
       finishItem();
     }
   } else if (phase === "S_WAIT" && streamDone) {
-    render(); // 총 문장 수가 확정되면 "n / 전체" 표시 갱신
+    render(); // 총 문장 수가 확정되면 "n / 전체" 표시와 마지막 문장의 ☑️ 갱신
+    if (isFinalChunk()) updateDisplay(`${sentenceIndex + 1} / ${sentences.length}`, currentChunkText());
   }
 }
 
