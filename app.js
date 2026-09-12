@@ -56,6 +56,7 @@ function speak(text, onend) {
   if (englishVoice) utterance.voice = englishVoice;
   utterance.lang = "en-US";
   utterance.rate = 0.82;
+  utterance.volume = 0.5;
   utterance.onend = () => onend && onend();
   utterance.onerror = () => onend && onend();
   window.speechSynthesis.speak(utterance);
