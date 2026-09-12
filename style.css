@@ -8,6 +8,7 @@
   --primary-hover: #4338ca;
   --border: #e2e4ea;
   --accent-bg: #eef0fe;
+  --done: #9aa0ad;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -20,11 +21,17 @@
     --primary-hover: #9191f7;
     --border: #2b2f3a;
     --accent-bg: #23263a;
+    --done: #565c6a;
   }
 }
 
 * {
   box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html, body {
+  height: 100%;
 }
 
 body {
@@ -32,68 +39,35 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family: "Apple SD Gothic Neo", "Malgun Gothic", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  overscroll-behavior: none;
 }
 
-.app {
+.screen {
+  min-height: 100vh;
+}
+
+/* ---------- 주제 선택 화면 ---------- */
+#screen-topics {
   max-width: 860px;
   margin: 0 auto;
   padding: 32px 20px 60px;
 }
 
-.app-header h1 {
-  font-size: 1.7rem;
+.topics-header h1 {
+  font-size: 1.6rem;
   margin: 0 0 6px;
 }
 
 .subtitle {
   color: var(--muted);
-  margin: 0 0 24px;
-}
-
-.controls {
-  background: var(--card-bg);
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 20px;
-  margin-bottom: 24px;
-}
-
-.control-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 16px;
-  margin-bottom: 14px;
-}
-
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  flex: 1 1 180px;
-  min-width: 0;
-}
-
-.field label {
-  font-size: 0.85rem;
-  color: var(--muted);
-}
-
-select,
-input[type="text"] {
-  padding: 10px 12px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--bg);
-  color: var(--text);
-  font-size: 0.95rem;
-  width: 100%;
+  margin: 0 0 20px;
 }
 
 .personalize {
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 10px 14px;
-  margin-bottom: 14px;
+  margin-bottom: 22px;
   background: var(--accent-bg);
 }
 
@@ -107,113 +81,150 @@ input[type="text"] {
   margin-bottom: 10px;
 }
 
-.button-row {
+.control-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
-}
-
-button {
-  padding: 11px 18px;
-  border-radius: 8px;
-  border: 1px solid transparent;
-  font-size: 0.95rem;
-  cursor: pointer;
-  font-weight: 600;
-}
-
-button.primary {
-  background: var(--primary);
-  color: #fff;
-}
-
-button.primary:hover {
-  background: var(--primary-hover);
-}
-
-button.secondary {
-  background: transparent;
-  border-color: var(--border);
-  color: var(--text);
-}
-
-button.secondary:hover:not(:disabled) {
-  background: var(--accent-bg);
-}
-
-button:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.results {
-  display: flex;
-  flex-direction: column;
   gap: 16px;
 }
 
-.results .placeholder {
-  color: var(--muted);
-  text-align: center;
-  padding: 40px 0;
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1 1 160px;
+  min-width: 0;
 }
 
-.answer-card {
+.field label {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+input[type="text"] {
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.95rem;
+  width: 100%;
+}
+
+.topic-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 14px;
+}
+
+.topic-card {
   background: var(--card-bg);
   border: 1px solid var(--border);
   border-radius: 14px;
-  padding: 18px 20px;
+  padding: 22px 18px;
+  font-size: 1.05rem;
+  font-weight: 600;
+  text-align: center;
+  cursor: pointer;
+  color: var(--text);
 }
 
-.answer-card-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 10px;
-}
-
-.answer-card-header h3 {
-  margin: 0;
-  font-size: 1.02rem;
-}
-
-.answer-card-header .badge {
-  font-size: 0.75rem;
+.topic-card:hover {
+  border-color: var(--primary);
   color: var(--primary);
-  background: var(--accent-bg);
-  border-radius: 999px;
-  padding: 3px 10px;
-  white-space: nowrap;
 }
 
-.answer-text {
-  line-height: 1.65;
-  font-size: 0.98rem;
-  white-space: pre-wrap;
-  margin: 0 0 12px;
+.topic-card:active {
+  transform: scale(0.97);
 }
 
-.answer-card-footer {
+/* ---------- 원버튼 연습 화면 ---------- */
+.practice-screen {
   display: flex;
-  gap: 8px;
+  flex-direction: column;
 }
 
-.answer-card-footer button {
-  padding: 7px 14px;
-  font-size: 0.85rem;
-  font-weight: 500;
-}
-
-.app-footer {
-  margin-top: 30px;
+.back-btn {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  z-index: 5;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
   color: var(--muted);
-  font-size: 0.8rem;
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.progress-bar {
+  text-align: center;
+  padding: 14px 16px 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+  min-height: 20px;
+}
+
+.tap-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 22px;
+  padding: 30px 24px 50px;
+  cursor: pointer;
+  user-select: none;
   text-align: center;
 }
 
+.hint-text {
+  margin: 0;
+  color: var(--primary);
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.main-text {
+  margin: 0;
+  font-size: 1.5rem;
+  line-height: 1.55;
+  font-weight: 600;
+  max-width: 640px;
+}
+
+.sentence-list {
+  max-width: 640px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.sentence-list .s-line {
+  font-size: 0.92rem;
+  line-height: 1.5;
+  color: var(--done);
+  transition: color 0.2s ease;
+}
+
+.sentence-list .s-line.current {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.sentence-list .s-line.upcoming {
+  color: var(--muted);
+  opacity: 0.55;
+}
+
 @media (max-width: 480px) {
-  .app {
+  #screen-topics {
     padding: 20px 14px 40px;
+  }
+
+  .main-text {
+    font-size: 1.25rem;
   }
 }
