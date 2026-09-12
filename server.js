@@ -247,11 +247,12 @@ const anthropic = process.env.ANTHROPIC_API_KEY ? new Anthropic() : null;
 
 const ANSWER_SYSTEM_PROMPT = `You are an expert OPIc (Oral Proficiency Interview - computer) coach. Given the examiner's question, you write the model answer that would earn an Advanced High (AH) to Superior (S) rating on the ACTFL scale.
 
-The question was transcribed from audio by speech recognition, so it may contain small errors or cut-off words. Infer the intended question from the recognizable words and answer that.
+The question was transcribed from audio by speech recognition and is often garbled: wrong words, missing words, a nonsense phrase. Your job is to reconstruct the most plausible OPIc question behind it and answer that one fully. Use every recognizable content word as a clue (a place, "country", "weather", "weekend", "music", "trip", "work", "neighborhood"...), map it onto the OPIc question bank (describe / routine / memorable experience / then-vs-now comparison / opinion / role-play), and commit to the best guess. A confident answer to a reasonable reconstruction scores; a refusal scores nothing.
 
 Two special cases - check them first:
 - If the question explicitly asks the speaker to introduce themselves (e.g. "tell me about yourself", "introduce yourself"), output exactly the single line SELF_INTRO and nothing else.
-- If the transcription is too garbled or too short to tell what topic is being asked about, output exactly the single line UNCLEAR and nothing else. Never fill the gap with a self-introduction or a generic answer about the speaker's life - an answer to the wrong question is worse than no answer.
+- Only if the transcription contains no content words at all (just fillers like "um", "okay", "yeah"), output exactly the single line UNCLEAR and nothing else. Even one topic word is enough to reconstruct a question - do not give up.
+- Do not drift into a self-introduction unless it was explicitly asked for.
 
 The answer is a spoken monologue that a Korean test taker will hear one sentence at a time and repeat out loud, so every sentence has to stand on its own and be comfortable to say after hearing it once.
 
@@ -276,8 +277,8 @@ What separates Advanced High and Superior from Advanced Low - every answer must 
 - Precise low-frequency vocabulary used naturally, never showy
 
 OUTPUT FORMAT - follow exactly:
-- The answer only. Nothing before it, nothing after it
-- One sentence per line, each line a complete sentence
+- First line: the question you are actually answering, reconstructed as the examiner would have said it, prefixed with "Q: "
+- Then the answer, one sentence per line, each line a complete sentence. Nothing after it
 - No numbering, no bullets, no blank lines, no quotation marks, no markdown, no filler sounds
 - Do not include internal or system XML tags in your response`;
 
@@ -326,7 +327,7 @@ app.post("/api/answer", express.raw({ type: () => true, limit: "25mb" }), async 
     return sendSelfIntro();
   }
 
-  // 모델이 첫 줄에 특수 표시(SELF_INTRO / UNCLEAR)를 내면 그에 맞게 처리한다
+  // 모델의 첫 줄: 특수 표시(SELF_INTRO / UNCLEAR)이거나 "Q: 추정한 질문"
   let firstLineSeen = false;
   const writeSentence = (line) => {
     const s = line.trim();
@@ -335,7 +336,14 @@ app.post("/api/answer", express.raw({ type: () => true, limit: "25mb" }), async 
       firstLineSeen = true;
       if (s === "SELF_INTRO") return "self_intro";
       if (s === "UNCLEAR") return "unclear";
+      if (/^Q:\s*/i.test(s)) {
+        const inferred = s.replace(/^Q:\s*/i, "");
+        console.log("추정한 질문:", inferred);
+        res.write(JSON.stringify({ inferred }) + "\n");
+        return;
+      }
     }
+    if (/^Q:\s*/i.test(s)) return; // 중간에 또 나오면 무시
     res.write(JSON.stringify({ sentence: s }) + "\n");
   };
 

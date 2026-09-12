@@ -173,6 +173,7 @@ html.flip .split {
   color: var(--muted);
   opacity: 0.8;
   max-width: 640px;
+  white-space: pre-line;
 }
 
 @media (max-width: 480px) {

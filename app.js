@@ -260,8 +260,15 @@ function render() {
   contextText.textContent = "";
   answerStatus.textContent = "";
   progressText.textContent = "";
-  // 인식된 질문을 작게 보여줘서 엉뚱한 질문으로 답하고 있는지 바로 알 수 있게 한다
-  questionText.textContent = session.question && phase !== "LISTENING" ? `Q: ${session.question}` : "";
+  // 인식된 질문과 모델이 추정한 질문을 작게 보여줘서 어떤 질문에 답하고 있는지 바로 알 수 있게 한다
+  if (session.question && phase !== "LISTENING") {
+    questionText.textContent =
+      session.inferred && session.inferred !== session.question
+        ? `Q: ${session.question}\n→ 추정: ${session.inferred}`
+        : `Q: ${session.question}`;
+  } else {
+    questionText.textContent = "";
+  }
 
   switch (phase) {
     case "IDLE":
@@ -364,6 +371,7 @@ async function submitQuestion() {
   session.chunkIndex = 0;
   session.streamDone = false;
   session.question = "";
+  session.inferred = "";
   render();
   updateDisplay("", "답변 만드는 중...");
 
@@ -386,6 +394,10 @@ async function submitQuestion() {
     if (msg.error) throw new Error(describeFailure(msg));
     if (msg.question) {
       session.question = msg.question;
+      render();
+    }
+    if (msg.inferred) {
+      session.inferred = msg.inferred;
       render();
     }
     if (msg.sentence) {
