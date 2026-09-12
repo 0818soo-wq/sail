@@ -8,57 +8,9 @@ const sentenceText = document.getElementById("sentence-text");
 const contextText = document.getElementById("context-text");
 const progressText = document.getElementById("progress-text");
 
-const supportsTTS = "speechSynthesis" in window;
 const supportsMic = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
 
-let englishVoice = null;
 let audioCtx = null;
-let gestureUnlocked = false;
-
-// ---------- TTS ----------
-// 기기에 설치된 영어 음성 중 가장 자연스러운 것을 고른다.
-// (iOS의 Premium/Enhanced, Chrome의 Google 음성이 기본 compact 음성보다 훨씬 낫다)
-function voiceScore(voice) {
-  const name = (voice.name || "").toLowerCase();
-  let score = 0;
-  if (name.includes("premium")) score += 100;
-  if (name.includes("enhanced")) score += 90;
-  if (name.includes("neural") || name.includes("natural")) score += 80;
-  if (name.includes("siri")) score += 70;
-  if (name.includes("google")) score += 60;
-  if (!voice.localService) score += 30;
-  if (voice.lang === "en-US") score += 10;
-  return score;
-}
-
-function pickEnglishVoice() {
-  if (!supportsTTS) return;
-  const voices = window.speechSynthesis
-    .getVoices()
-    .filter((v) => v.lang && v.lang.toLowerCase().startsWith("en"));
-  if (!voices.length) return;
-  englishVoice = voices.slice().sort((a, b) => voiceScore(b) - voiceScore(a))[0];
-}
-if (supportsTTS) {
-  pickEnglishVoice();
-  window.speechSynthesis.onvoiceschanged = pickEnglishVoice;
-}
-
-function speak(text, onend) {
-  if (!supportsTTS) {
-    if (onend) onend();
-    return;
-  }
-  window.speechSynthesis.cancel();
-  const utterance = new SpeechSynthesisUtterance(text);
-  if (englishVoice) utterance.voice = englishVoice;
-  utterance.lang = "en-US";
-  utterance.rate = 0.82;
-  utterance.volume = 0.5;
-  utterance.onend = () => onend && onend();
-  utterance.onerror = () => onend && onend();
-  window.speechSynthesis.speak(utterance);
-}
 
 // ---------- 종료음(띵동) ----------
 function ensureAudioCtx() {
@@ -104,15 +56,9 @@ function updateDisplay(title, text) {
   }).catch(() => {});
 }
 
-// 첫 터치에서만: iOS는 사용자 터치 안에서 첫 발화가 일어나야 이후 speak()가 소리를 낸다
+// 사용자 터치 안에서 오디오를 열어둬야 이후 띵동이 울린다
 function unlockOnFirstGesture() {
   ensureAudioCtx();
-  if (gestureUnlocked) return;
-  gestureUnlocked = true;
-  if (supportsTTS) {
-    window.speechSynthesis.cancel();
-    window.speechSynthesis.speak(new SpeechSynthesisUtterance(" "));
-  }
 }
 
 // ---------- 마이크로 질문 듣기 ----------
@@ -134,7 +80,6 @@ function releaseMic() {
 }
 
 async function startListening() {
-  if (supportsTTS) window.speechSynthesis.cancel();
   releaseMic();
   const token = ++session.token;
   session.phase = "LISTENING";
@@ -188,7 +133,7 @@ function stopListening() {
 }
 
 // ---------- 세션 ----------
-// phase: IDLE | LISTENING | PROCESSING | S_PLAYING | S_WAIT | S_PENDING | ITEM_DONE | ERROR | MIC_ERROR
+// phase: IDLE | LISTENING | PROCESSING | S_WAIT | S_PENDING | ITEM_DONE | ERROR | MIC_ERROR
 const session = {
   token: 0,
   phase: "IDLE",
@@ -275,13 +220,12 @@ function render() {
       listenStatus.textContent = "듣기 완료";
       answerStatus.textContent = "답변 만드는 중...";
       break;
-    case "S_PLAYING":
     case "S_WAIT": {
       const chunks = currentChunks();
       listenStatus.textContent = "다음 질문은 여기 터치";
       sentenceText.textContent = chunks[chunkIndex];
       if (chunks.length > 1) renderContext(chunks, chunkIndex);
-      answerStatus.textContent = phase === "S_WAIT" ? "따라 말한 뒤 터치" : "";
+      answerStatus.textContent = "읽은 뒤 터치";
       progressText.textContent =
         chunks.length > 1
           ? `문장 ${sentenceIndex + 1} / ${total} · ${chunkIndex + 1} / ${chunks.length}`
@@ -307,25 +251,15 @@ function render() {
   }
 }
 
+// 현재 문장(또는 덩어리)을 화면과 두 번째 화면에 띄우고 터치를 기다린다
 function playChunk() {
   const si = session.sentenceIndex;
   const ci = session.chunkIndex;
   const chunks = currentChunks();
-  const text = chunks[ci];
-  session.phase = "S_PLAYING";
+  session.phase = "S_WAIT";
   render();
   const sentenceLabel = `${si + 1}${session.streamDone ? ` / ${session.sentences.length}` : ""}`;
-  updateDisplay(chunks.length > 1 ? `${sentenceLabel} · ${ci + 1}/${chunks.length}` : sentenceLabel, text);
-  speak(text, () => {
-    if (session.phase !== "S_PLAYING" || session.sentenceIndex !== si || session.chunkIndex !== ci) return;
-    const hasMore = ci + 1 < chunks.length || si + 1 < session.sentences.length || !session.streamDone;
-    if (hasMore) {
-      session.phase = "S_WAIT";
-      render();
-    } else {
-      finishItem();
-    }
-  });
+  updateDisplay(chunks.length > 1 ? `${sentenceLabel} · ${ci + 1}/${chunks.length}` : sentenceLabel, chunks[ci]);
 }
 
 function finishItem() {
@@ -362,13 +296,8 @@ function onSentencesUpdated() {
     } else if (streamDone) {
       finishItem();
     }
-  } else if (
-    phase === "S_WAIT" &&
-    streamDone &&
-    sentenceIndex + 1 >= sentences.length &&
-    chunkIndex + 1 >= currentChunks().length
-  ) {
-    finishItem(); // 마지막 덩어리였음이 뒤늦게 확정된 경우 - 터치 없이 바로 종료음
+  } else if (phase === "S_WAIT" && streamDone) {
+    render(); // 총 문장 수가 확정되면 "n / 전체" 표시 갱신
   }
 }
 
@@ -444,9 +373,8 @@ function onListenTap() {
   startListening();
 }
 
-// 다음 문장(또는 다음 덩어리)으로 넘어간다. 재생 중이면 지금 소리를 끊고 넘어간다.
+// 다음 문장(또는 다음 덩어리)으로 넘어간다. 마지막이었으면 띵동.
 function advance() {
-  if (supportsTTS) window.speechSynthesis.cancel();
   if (session.chunkIndex + 1 < currentChunks().length) {
     session.chunkIndex += 1;
     playChunk();
@@ -467,14 +395,13 @@ function advance() {
   }
 }
 
-// 답변 영역: 듣기 중이면 답변 시작, 답변 중이면 (재생이 안 끝났어도) 다음 문장
+// 답변 영역: 듣기 중이면 답변 시작, 답변 중이면 다음 문장
 function onAnswerTap() {
   unlockOnFirstGesture();
   switch (session.phase) {
     case "LISTENING":
       submitQuestion();
       break;
-    case "S_PLAYING":
     case "S_WAIT":
       advance();
       break;
@@ -499,17 +426,12 @@ answerZone.addEventListener("keydown", (e) => {
 });
 
 // 워치 리모컨: /watch 페이지의 [듣기]/[다음] 버튼이 보낸 명령을 받아 폰에서 실행한다.
-// iOS는 최초 한 번은 폰 화면을 직접 터치해야 소리를 낼 수 있으므로, 그 전에는 안내만 띄운다.
 function handleRemote(cmd) {
-  if (!gestureUnlocked) {
-    listenStatus.textContent = "워치 리모컨을 쓰려면 폰 화면을 한 번 터치하세요";
-    return;
-  }
   if (cmd === "listen") {
     startListening();
   } else if (cmd === "next") {
     if (session.phase === "LISTENING") submitQuestion();
-    else if (session.phase === "S_PLAYING" || session.phase === "S_WAIT") advance();
+    else if (session.phase === "S_WAIT") advance();
   }
 }
 
