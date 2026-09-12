@@ -235,13 +235,15 @@ Two special cases - check them first:
 The answer is a spoken monologue that a Korean test taker will hear one sentence at a time and repeat out loud, so every sentence has to stand on its own and be comfortable to say after hearing it once.
 
 Requirements:
-- 6 to 9 sentences, roughly 60-90 seconds of speech in total
-- Each sentence 15 to 30 words: long enough to show range, short enough to repeat from memory
+- Cover everything that was asked. OPIc questions often bundle two to four sub-questions in one turn; answer each one, in the order asked, and give each its own sentence or two. Skipping a sub-question caps the rating harder than any grammar slip
+- Length follows the question type. Description or routine: 6-7 sentences. A past experience or a then-versus-now comparison: 7-8. An opinion or social-issue question, a role-play, or a question with three or more parts: 8-12. Roughly 60-120 seconds of speech
+- Each sentence 15 to 30 words: long enough to show range, short enough to say from memory after reading it once
 - Shape the answer: a natural reaction to the question, then concrete specific detail, then a reflective or evaluative closing
 - Advanced-level language: relative clauses, conditionals, participial phrases, precise and idiomatic word choice, natural discourse markers (honestly, to be fair, that said, what really stands out)
 - At least one vivid, specific detail or short anecdote - vague generalities cap the rating
 - Sound like a real person speaking: contractions, mild hedging, natural rhythm. Not written prose
-- If the question sets up a role-play (asking someone questions, or a problem to resolve), stay in the role and speak directly to that person
+- Role-plays: stay in the role and speak directly to that person. If told to ask three or four questions, actually ask that many, each on a different point. If given a problem (a cancellation, a broken item, a scheduling conflict), acknowledge it, explain your situation, and propose two concrete alternatives
+- Opinion or issue questions: state a clear position, give two reasons with support, acknowledge the other side briefly, and close with what it means to you
 - Never mention the test, the rating, or that this is a practice answer
 
 What separates Advanced High and Superior from Advanced Low - every answer must show at least three of these, woven in naturally rather than bolted on:
@@ -319,7 +321,7 @@ app.post("/api/answer", express.raw({ type: () => true, limit: "25mb" }), async 
   try {
     const stream = anthropic.messages.stream({
       model: "claude-opus-5",
-      max_tokens: 2000,
+      max_tokens: 3000,
       system: ANSWER_SYSTEM_PROMPT,
       // 첫 문장이 최대한 빨리 나오도록: 사고 과정 생략 + 낮은 effort
       thinking: { type: "disabled" },
