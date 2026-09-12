@@ -3,19 +3,32 @@
 // 비어 있는 항목은 그냥 무시되고 일반적인 내용으로 생성된다.
 
 export const PROFILE = {
-  englishName: "", // 예: "Alex" (오픽에서 쓸 영어 이름)
-  age: "", // 예: "late twenties"
-  job: "", // 예: "a marketing manager at a mid-sized IT company"
-  city: "", // 예: "Suwon, just south of Seoul"
-  livingWith: "", // 예: "my parents and my younger sister"
-  homeType: "", // 예: "a 3-bedroom apartment on the 12th floor"
-  hobbies: "", // 예: "watching movies at home, hiking on weekends, playing guitar"
-  exercise: "", // 예: "jogging along the river three times a week"
-  favoritePlace: "", // 예: "a quiet cafe near my office"
-  recentTrip: "", // 예: "Osaka last spring with two college friends"
-  personality: "", // 예: "quiet at first but talkative once I get comfortable"
-  goalForOpic: "", // 예: "AL for a job application"
-  extra: "", // 그 밖에 답변에 자주 등장시키고 싶은 내 이야기
+  englishName: "Suyeon",
+  age: "35 years old",
+  gender: "female",
+  family: "married, living with my husband and our five-year-old son",
+  city:
+    "Sangam in Seoul - the neighborhood known for the World Cup Stadium, with lots of parks and wooded hills that make it a really livable area",
+  job:
+    "I work at Samsung Life Insurance, where my team redesigns the company's business processes using AI - basically taking the work people do manually and reinventing it around AI",
+  jobChallenge:
+    "I majored in economics, so the technical side of my current work is genuinely challenging and I'm constantly learning on the job",
+  homeType:
+    "a three-bedroom apartment with an unusually spacious living room, so our family spends almost all our time together in there rather than in separate rooms",
+  homeFavorite:
+    "our place has a mountain view, so I love throwing the curtains wide open and drinking coffee while looking outside",
+  hobbies:
+    "planning trips and traveling - honestly, travel is the reason I work; I'm the one who plans every detail of our family trips",
+  exercise: "running near the Han River three times a week",
+  favoritePlace:
+    "the riverside park along the Han River - it's where I go to clear my head and sort out my thoughts",
+  personality:
+    "bright and outgoing; I genuinely love talking with people",
+  englishBackground:
+    "I lived abroad often when I was young and have always loved English",
+  goalForOpic:
+    "I keep getting AL, but I believe my actual level is AH or Superior, and not getting that score is my biggest source of stress",
+  extra: "",
 };
 
 export function profileSummary() {

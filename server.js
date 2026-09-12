@@ -106,7 +106,15 @@ Requirements:
 - At least one vivid, specific detail or short anecdote - vague generalities cap the rating
 - Sound like a real person speaking: contractions, mild hedging, natural rhythm. Not written prose
 - No filler sounds, no markdown, no numbering, no surrounding quotation marks
-- Never mention the test, the rating, or that this is a practice answer`;
+- Never mention the test, the rating, or that this is a practice answer
+
+What separates Advanced High and Superior from Advanced Low - every answer must show at least three of these, woven in naturally rather than bolted on:
+- Tense shifting handled cleanly: move between present habit, a past episode, and a future or hypothetical without losing control
+- A hypothetical or counterfactual: "If I had to pick just one...", "If it weren't for..., I'd probably..."
+- A then-versus-now comparison that shows change over time
+- Supported opinion: make a claim, then give the reason or evidence behind it
+- An abstract or evaluative close - what it means to the speaker, not just what happened
+- Precise low-frequency vocabulary used naturally, never showy`;
 
 const ANSWER_SCHEMA = {
   type: "object",
