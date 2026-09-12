@@ -142,7 +142,11 @@ async function startListening() {
   }
 
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    // 헤드셋/스피커에서 나오는 시험 질문을 잡는 용도라 노이즈 억제·에코 제거는 끈다
+    // (둘 다 사람 목소리가 아닌 소리를 지우려 들어 인식률을 떨어뜨린다)
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: true },
+    });
     if (session.token !== token) {
       stream.getTracks().forEach((t) => t.stop());
       return;
@@ -158,7 +162,10 @@ async function startListening() {
   startMeter(mediaStream);
   chunks = [];
   const mimeType = pickRecorderMime();
-  recorder = new MediaRecorder(mediaStream, mimeType ? { mimeType } : undefined);
+  recorder = new MediaRecorder(mediaStream, {
+    ...(mimeType ? { mimeType } : {}),
+    audioBitsPerSecond: 128000,
+  });
   recorder.ondataavailable = (e) => {
     if (e.data && e.data.size) chunks.push(e.data);
   };
