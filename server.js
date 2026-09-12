@@ -95,6 +95,42 @@ app.post("/api/notify", async (req, res) => {
   res.json({ ok: true, sent: subs.length });
 });
 
+// ---------- 두 번째 화면 (display.html / ESP32) ----------
+// 앱이 현재 보여주는 문구를 서버가 들고 있다가, 접속한 표시 기기들에 SSE로 즉시 밀어준다.
+let current = { title: "", text: "", ts: 0 };
+const displayClients = new Set();
+
+function broadcastCurrent() {
+  const payload = `data: ${JSON.stringify(current)}\n\n`;
+  for (const res of displayClients) res.write(payload);
+}
+
+app.post("/api/current", (req, res) => {
+  const { title, text } = req.body || {};
+  current = { title: String(title || ""), text: String(text || ""), ts: Date.now() };
+  broadcastCurrent();
+  res.json({ ok: true });
+});
+
+app.get("/api/current", (req, res) => {
+  res.json(current);
+});
+
+app.get("/api/current/stream", (req, res) => {
+  res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders();
+  res.write(`data: ${JSON.stringify(current)}\n\n`);
+  displayClients.add(res);
+  const keepAlive = setInterval(() => res.write(": ping\n\n"), 25000);
+  req.on("close", () => {
+    clearInterval(keepAlive);
+    displayClients.delete(res);
+  });
+});
+
 // ---------- 질문 음성 -> 글 (OpenAI Whisper) ----------
 const AUDIO_EXT = {
   "audio/mp4": "mp4",

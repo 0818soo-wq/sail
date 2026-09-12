@@ -128,7 +128,18 @@ async function enablePush() {
   return true;
 }
 
+// 두 번째 화면(display.html)에 현재 문구를 보낸다
+function updateDisplay(title, text) {
+  fetch("/api/current", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title, text }),
+  }).catch(() => {});
+}
+
+// 표시 화면 갱신 + 워치 알림이 켜져 있으면 푸시도 보낸다
 function pushToWatch(title, body) {
+  updateDisplay(title, body);
   if (!pushEnabled) return;
   fetch("/api/notify", {
     method: "POST",
@@ -179,6 +190,7 @@ async function startListening() {
   const token = ++session.token;
   session.phase = "LISTENING";
   render();
+  updateDisplay("", "🎧 질문 듣는 중");
 
   if (!supportsMic) {
     session.phase = "MIC_ERROR";
@@ -369,6 +381,7 @@ function finishItem() {
   session.phase = "ITEM_DONE";
   render();
   answerStatus.textContent = "";
+  updateDisplay("", "✅ 답변 끝");
   playChime(() => {
     if (session.phase === "ITEM_DONE") render();
   });
@@ -417,6 +430,7 @@ async function submitQuestion() {
   session.streamDone = false;
   session.question = "";
   render();
+  updateDisplay("", "답변 만드는 중...");
 
   const blob = await stopListening();
   if (session.token !== token) return;
