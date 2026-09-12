@@ -71,10 +71,15 @@ body {
   color: var(--muted);
 }
 
-.listen-zone {
-  background: var(--listen-bg);
+.answer-zone {
+  background: var(--answer-bg);
   border-bottom: 1px solid var(--border);
   padding-top: calc(24px + env(safe-area-inset-top));
+}
+
+.listen-zone {
+  background: var(--listen-bg);
+  padding-bottom: calc(24px + env(safe-area-inset-bottom));
 }
 
 .listen-zone:active {
@@ -83,11 +88,6 @@ body {
 
 .listen-zone.recording {
   background: var(--listen-active);
-}
-
-.answer-zone {
-  background: var(--answer-bg);
-  padding-bottom: calc(24px + env(safe-area-inset-bottom));
 }
 
 .answer-zone:active {

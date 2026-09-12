@@ -319,7 +319,7 @@ function render() {
       listenStatus.textContent = "터치해서 질문 듣기";
       break;
     case "LISTENING":
-      listenStatus.textContent = "🎧 듣는 중 · 질문이 끝나면 아래를 터치";
+      listenStatus.textContent = "🎧 듣는 중 · 질문이 끝나면 위를 터치";
       answerStatus.textContent = "질문이 끝나면 터치";
       break;
     case "PROCESSING":
