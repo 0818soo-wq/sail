@@ -251,9 +251,10 @@ const session = {
   errorMessage: "",
 };
 
-// 한 문장을 3단어씩 끊는다. 마지막에 1단어만 남으면 앞 덩어리에 붙인다.
-const CHUNK_WORDS = 3;
+// 한 번에 읽어줄 단위. 0이면 문장 통째로, 3이면 3단어씩 끊어서 (마지막 1단어는 앞에 붙임)
+const CHUNK_WORDS = 0;
 function chunkSentence(sentence) {
+  if (!CHUNK_WORDS) return [sentence];
   const words = sentence.split(/\s+/).filter(Boolean);
   const chunks = [];
   for (let i = 0; i < words.length; i += CHUNK_WORDS) {
@@ -330,9 +331,12 @@ function render() {
       const chunks = currentChunks();
       listenStatus.textContent = "다음 질문은 여기 터치";
       sentenceText.textContent = chunks[chunkIndex];
-      renderContext(chunks, chunkIndex);
+      if (chunks.length > 1) renderContext(chunks, chunkIndex);
       answerStatus.textContent = phase === "S_WAIT" ? "따라 말한 뒤 터치" : "";
-      progressText.textContent = `문장 ${sentenceIndex + 1} / ${total} · ${chunkIndex + 1} / ${chunks.length}`;
+      progressText.textContent =
+        chunks.length > 1
+          ? `문장 ${sentenceIndex + 1} / ${total} · ${chunkIndex + 1} / ${chunks.length}`
+          : `문장 ${sentenceIndex + 1} / ${total}`;
       break;
     }
     case "S_PENDING":
@@ -361,10 +365,8 @@ function playChunk() {
   const text = chunks[ci];
   session.phase = "S_PLAYING";
   render();
-  pushToWatch(
-    `${si + 1}${session.streamDone ? ` / ${session.sentences.length}` : ""} · ${ci + 1}/${chunks.length}`,
-    text
-  );
+  const sentenceLabel = `${si + 1}${session.streamDone ? ` / ${session.sentences.length}` : ""}`;
+  pushToWatch(chunks.length > 1 ? `${sentenceLabel} · ${ci + 1}/${chunks.length}` : sentenceLabel, text);
   speak(text, () => {
     if (session.phase !== "S_PLAYING" || session.sentenceIndex !== si || session.chunkIndex !== ci) return;
     const hasMore = ci + 1 < chunks.length || si + 1 < session.sentences.length || !session.streamDone;
