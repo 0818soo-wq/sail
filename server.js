@@ -105,6 +105,10 @@ function broadcastCurrent() {
   for (const res of displayClients) res.write(payload);
 }
 
+app.get("/display", (req, res) => {
+  res.sendFile(path.join(__dirname, "display.html"));
+});
+
 app.post("/api/current", (req, res) => {
   const { title, text } = req.body || {};
   current = { title: String(title || ""), text: String(text || ""), ts: Date.now() };
