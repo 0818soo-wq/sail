@@ -80,8 +80,25 @@ function releaseMic() {
   recorder = null;
 }
 
-async function startListening() {
+function micIsLive() {
+  return !!mediaStream && mediaStream.getAudioTracks().some((t) => t.readyState === "live");
+}
+
+// 마이크는 한 번 열면 세션 내내 유지한다 - 질문마다 다시 열면 iOS가 매번 권한을 물을 수 있다
+async function ensureMic() {
+  if (micIsLive()) return true;
   releaseMic();
+  try {
+    mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function startListening() {
+  if (recorder && recorder.state !== "inactive") recorder.stop();
+  recorder = null;
   const token = ++session.token;
   session.phase = "LISTENING";
   render();
@@ -93,15 +110,9 @@ async function startListening() {
     return;
   }
 
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    if (session.token !== token) {
-      stream.getTracks().forEach((t) => t.stop());
-      return;
-    }
-    mediaStream = stream;
-  } catch {
-    if (session.token !== token) return;
+  const ok = await ensureMic();
+  if (session.token !== token) return;
+  if (!ok) {
     session.phase = "MIC_ERROR";
     render();
     return;
@@ -116,19 +127,16 @@ async function startListening() {
   recorder.start();
 }
 
+// 녹음만 멈추고 마이크 스트림은 열어둔다
 function stopListening() {
   return new Promise((resolve) => {
     const r = recorder;
+    recorder = null;
     if (!r || r.state === "inactive") {
-      releaseMic();
       resolve(new Blob(chunks, { type: "audio/mp4" }));
       return;
     }
-    r.onstop = () => {
-      const blob = new Blob(chunks, { type: r.mimeType || "audio/mp4" });
-      releaseMic();
-      resolve(blob);
-    };
+    r.onstop = () => resolve(new Blob(chunks, { type: r.mimeType || "audio/mp4" }));
     r.stop();
   });
 }
