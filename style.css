@@ -74,7 +74,14 @@ body {
 .answer-zone {
   background: var(--answer-bg);
   border-bottom: 1px solid var(--border);
-  padding-top: calc(24px + env(safe-area-inset-top));
+  justify-content: flex-start;
+  gap: 10px;
+  padding-top: calc(12px + env(safe-area-inset-top));
+}
+
+.answer-zone .zone-label {
+  top: auto;
+  bottom: 14px;
 }
 
 .listen-zone {
@@ -111,7 +118,7 @@ body {
 
 .sentence-text {
   margin: 0;
-  font-size: 1.6rem;
+  font-size: 0.8rem;
   line-height: 1.45;
   font-weight: 700;
   max-width: 640px;
@@ -142,6 +149,6 @@ body {
 
 @media (max-width: 480px) {
   .sentence-text {
-    font-size: 1.35rem;
+    font-size: 0.7rem;
   }
 }
