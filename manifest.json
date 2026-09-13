@@ -1,6 +1,6 @@
 {
-  "name": "오픽 원버튼 트레이너",
-  "short_name": "OPIc 트레이너",
+  "name": "SAIL 원버튼 트레이너",
+  "short_name": "SAIL 트레이너",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
