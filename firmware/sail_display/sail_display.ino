@@ -1,4 +1,4 @@
-// SAIL 트레이너 - ESP32-S3 1.54인치 LCD 표시기
+// SAIL 트레이너 - ESP32-S3-Touch-LCD-1.54 표시기
 //
 // 하는 일: 서버의 현재 문장을 가져와 화면에 크게 띄우고,
 //          보드의 버튼 두 개로 폰 앱의 [듣기] / [다음]을 누른다.
@@ -28,17 +28,17 @@ const char *WIFI_PASS = "와이파이비밀번호";
 // 2) 서버 주소 (https:// 빼고 도메인만)
 const char *SERVER_HOST = "opic-trainer-tw9g.onrender.com";
 
-// 3) 화면 핀 번호 - 보드 위키의 핀 표를 보고 채우세요
-#define LCD_SCK 0   // SCLK / SCL
-#define LCD_MOSI 0  // MOSI / SDA
-#define LCD_DC 0    // DC
-#define LCD_CS 0    // CS
-#define LCD_RST 0   // RST  (없으면 GFX_NOT_DEFINED)
-#define LCD_BL 0    // 백라이트 BL
+// 3) 화면 핀 - ESP32-S3-Touch-LCD-1.54 핀 표 기준이라 그대로 두면 됩니다
+#define LCD_SCK 38   // LCD_CLK
+#define LCD_MOSI 39  // LCD_DIN
+#define LCD_DC 45    // LCD_DC
+#define LCD_CS 21    // LCD_CS
+#define LCD_RST 40   // LCD_RST
+#define LCD_BL 46    // LCD_BL (백라이트)
 
-// 4) 버튼 핀 번호 (BOOT 버튼은 보통 0번)
+// 4) 버튼 - 보드 윗면의 "-KEY"(IO0)와 "PLUS"(IO4)
 #define BTN_NEXT 0    // 다음 문장
-#define BTN_LISTEN 0  // 새 질문 듣기
+#define BTN_LISTEN 4  // 새 질문 듣기
 
 // 5) 화면 방향 0~3. 글자가 뒤집혀 보이면 숫자를 바꿔보세요
 #define LCD_ROTATION 0
