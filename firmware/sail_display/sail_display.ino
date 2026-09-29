@@ -48,9 +48,10 @@ const char *SERVER_HOST = "opic-trainer-tw9g.onrender.com";
 Arduino_DataBus *bus = new Arduino_ESP32SPI(LCD_DC, LCD_CS, LCD_SCK, LCD_MOSI, GFX_NOT_DEFINED);
 Arduino_GFX *gfx = new Arduino_ST7789(bus, LCD_RST, LCD_ROTATION, true /* IPS */, 240, 240);
 
-const uint16_t COLOR_BG = BLACK;
-const uint16_t COLOR_TEXT = WHITE;
-const uint16_t COLOR_TITLE = RGB565(143, 143, 248);
+// 라이브러리 버전에 따라 BLACK/WHITE 이름이 다르므로 색을 직접 숫자로 정의한다 (RGB565 형식)
+const uint16_t COLOR_BG = 0x0000;     // 검정
+const uint16_t COLOR_TEXT = 0xFFFF;   // 흰색
+const uint16_t COLOR_TITLE = 0x8C7F;  // 연보라
 
 WiFiClientSecure secureClient;
 HTTPClient http;
