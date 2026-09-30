@@ -132,6 +132,8 @@ const FontSpec FONTS[] = {
   {u8g2_font_helvB12_tr, 16, 12},
 };
 const int FONT_COUNT = sizeof(FONTS) / sizeof(FONTS[0]);
+// 글꼴 크기를 일정하게: 0=가장 큼(24), 1=18, 2=14, 3=12. 문장이 화면에 안 들어갈 때만 자동으로 더 작아진다
+const int START_FONT = 1;
 const int16_t TEXT_LEFT = 6;
 const int16_t TEXT_WIDTH = 240 - 12;  // 좌우 여백 6px씩
 
@@ -173,7 +175,7 @@ void drawWrapped(const String &text, int16_t top) {
   gfx->setTextWrap(false);  // 줄바꿈은 우리가 직접 한다 (글자 폭 측정이 틀어지지 않게)
   const int16_t avail = 240 - top - 2;
   int pick = FONT_COUNT - 1;
-  for (int f = 0; f < FONT_COUNT; f++) {
+  for (int f = START_FONT; f < FONT_COUNT; f++) {
     gfx->setFont(FONTS[f].font);
     if (wrapLines(text, NULL, 0) * FONTS[f].lineH <= avail) {
       pick = f;
