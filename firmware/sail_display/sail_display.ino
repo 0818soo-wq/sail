@@ -136,6 +136,8 @@ void drawWrapped(const String &text, uint8_t size, int16_t top) {
     }
     gfx->setCursor(4, y);
     gfx->print(text.substring(start, end));
+    gfx->setCursor(size >= 3 ? 6 : 5, y);  // 살짝 옆에 한 번 더 그려서 글자를 굵게 만든다
+    gfx->print(text.substring(start, end));
     y += lineH;
     start = end;
     while (start < (int)text.length() && text[start] == ' ') start++;
