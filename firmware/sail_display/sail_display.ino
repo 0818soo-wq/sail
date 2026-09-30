@@ -193,6 +193,80 @@ bool pressed(uint8_t pin, bool &wasDown) {
   return fired;
 }
 
+const uint16_t COLOR_RED = 0xF800;
+const uint16_t COLOR_GREEN = 0x07E0;
+const uint16_t COLOR_YELLOW = 0xFFE0;
+
+// ---- 진단용: 화면에 작은 글씨로 여러 줄을 찍는다 ----
+int16_t diagY = 4;
+
+void diagClear() {
+  gfx->fillScreen(COLOR_BG);
+  diagY = 4;
+}
+
+void diagLine(const String &s, uint16_t color = COLOR_TEXT) {
+  Serial.println(s);
+  if (diagY > 228) return;
+  gfx->setTextSize(1);
+  gfx->setTextColor(color);
+  gfx->setCursor(4, diagY);
+  gfx->print(s);
+  diagY += 11;
+}
+
+// 주변 와이파이를 찾아 화면에 보여주고, 내 와이파이 이름이 보이는지 돌려준다
+bool scanAndShow() {
+  diagLine("Scanning...", COLOR_TITLE);
+  int n = WiFi.scanNetworks(false, true);
+  bool seen = false;
+  diagLine(String(n) + " networks found", COLOR_TITLE);
+  int shown = 0;
+  for (int i = 0; i < n && shown < 9; i++) {
+    String ssid = WiFi.SSID(i);
+    bool exact = (ssid == WIFI_SSID);
+    if (exact) seen = true;
+    String shownName = toAscii(ssid);
+    String line = String(exact ? ">" : " ") + shownName + " ch" + String((int)WiFi.channel(i)) + " " + String((int)WiFi.RSSI(i));
+    if (shownName != ssid) line += " (non-ascii)";
+    diagLine(line, exact ? COLOR_GREEN : COLOR_TEXT);
+    shown++;
+  }
+  WiFi.scanDelete();
+  return seen;
+}
+
+// 와이파이에 붙을 때까지 계속 시도한다. 실패하면 이유를 화면에 보여준다
+void connectWifi() {
+  WiFi.mode(WIFI_STA);
+  for (int attempt = 1;; attempt++) {
+    diagClear();
+    diagLine("WiFi try #" + String(attempt), COLOR_TITLE);
+    diagLine(String("Name: ") + WIFI_SSID, COLOR_YELLOW);
+    bool seen = scanAndShow();
+    if (!seen) diagLine("!! Name NOT seen. 2.4GHz on?", COLOR_RED);
+
+    WiFi.disconnect(true, true);
+    delay(200);
+    WiFi.begin(WIFI_SSID, WIFI_PASS);
+
+    uint32_t t0 = millis();
+    wl_status_t s = WiFi.status();
+    while (millis() - t0 < 20000) {
+      s = WiFi.status();
+      if (s == WL_CONNECTED || s == WL_CONNECT_FAILED) break;
+      delay(300);
+    }
+    if (s == WL_CONNECTED) return;
+
+    if (s == WL_NO_SSID_AVAIL) diagLine("FAIL: name not found", COLOR_RED);
+    else if (s == WL_CONNECT_FAILED) diagLine("FAIL: password/security", COLOR_RED);
+    else diagLine("FAIL: timeout, status=" + String((int)s), COLOR_RED);
+    diagLine("Retry in 5s...", COLOR_TITLE);
+    delay(5000);
+  }
+}
+
 void setup() {
   Serial.begin(115200);
 
@@ -202,19 +276,13 @@ void setup() {
   pinMode(BTN_LISTEN, INPUT_PULLUP);
 
   gfx->begin();
-  gfx->fillScreen(COLOR_BG);
-  gfx->setTextColor(COLOR_TITLE);
-  gfx->setTextSize(2);
-  gfx->setCursor(4, 100);
-  gfx->print("WiFi...");
+  diagClear();
 
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(WIFI_SSID, WIFI_PASS);
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(300);
-    Serial.print(".");
-  }
-  Serial.println("\nWiFi OK: " + WiFi.localIP().toString());
+  connectWifi();
+  diagClear();
+  diagLine("WiFi OK", COLOR_GREEN);
+  diagLine(WiFi.localIP().toString());
+  delay(1200);
 
   secureClient.setInsecure();  // 서버 인증서 검증 생략 (개인용)
   http.setReuse(true);         // 연결을 유지해 응답을 빠르게
