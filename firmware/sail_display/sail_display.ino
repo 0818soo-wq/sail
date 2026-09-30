@@ -48,6 +48,10 @@ const char *SERVER_HOST = "opic-trainer-tw9g.onrender.com";
 // 6) 화면 밝기 0(꺼짐)~255(최대). 낮출수록 눈이 편하고 배터리가 오래 갑니다
 #define BL_BRIGHTNESS 60
 
+// 7) 배터리 전압을 읽는 핀 (이 보드는 IO1에 전압을 1/3로 나눠서 연결해 둠)
+#define BAT_ADC_PIN 1
+#define BAT_DIVIDER 3
+
 // ==============================================================
 
 Arduino_DataBus *bus = new Arduino_ESP32SPI(LCD_DC, LCD_CS, LCD_SCK, LCD_MOSI, GFX_NOT_DEFINED);
@@ -57,6 +61,9 @@ Arduino_GFX *gfx = new Arduino_ST7789(bus, LCD_RST, LCD_ROTATION, true /* IPS */
 const uint16_t COLOR_BG = 0x0000;     // 검정
 const uint16_t COLOR_TEXT = 0xFFFF;   // 흰색
 const uint16_t COLOR_TITLE = 0x8C7F;  // 연보라
+const uint16_t COLOR_RED = 0xF800;
+const uint16_t COLOR_GREEN = 0x07E0;
+const uint16_t COLOR_YELLOW = 0xFFE0;
 
 WiFiClientSecure secureClient;
 HTTPClient http;
@@ -176,7 +183,7 @@ int wrapLines(const String &text, String *lines, int maxLines) {
 
 void drawWrapped(const String &text, int16_t top) {
   gfx->setTextWrap(false);  // 줄바꿈은 우리가 직접 한다 (글자 폭 측정이 틀어지지 않게)
-  const int16_t avail = 240 - top - 2;
+  const int16_t avail = 240 - top - 14;  // 아래 12px은 배터리 표시 자리
   int pick = FONT_COUNT - 1;
   for (int f = START_FONT; f < FONT_COUNT; f++) {
     gfx->setFont(FONTS[f].font);
@@ -194,10 +201,49 @@ void drawWrapped(const String &text, int16_t top) {
   if (count > MAX_LINES) count = MAX_LINES;
   for (int i = 0; i < count; i++) {
     int16_t baseline = top + fs.ascent + i * fs.lineH;
-    if (baseline > 240) break;
+    if (baseline > 226) break;
     gfx->setCursor(TEXT_LEFT, baseline);
     gfx->print(lines[i]);
   }
+}
+
+// ---- 배터리 잔량 (오른쪽 아래 구석에 작게) ----
+// 리튬배터리 전압 -> 잔량(%) 대략표. 전압이 높은 쪽부터 적는다
+const float BAT_CURVE[][2] = {
+  {4.20, 100}, {4.06, 90}, {3.98, 80}, {3.92, 70}, {3.87, 60}, {3.82, 50},
+  {3.79, 40}, {3.77, 30}, {3.74, 20}, {3.68, 10}, {3.45, 5}, {3.30, 0},
+};
+const int BAT_CURVE_N = sizeof(BAT_CURVE) / sizeof(BAT_CURVE[0]);
+
+int batteryPercent() {
+  uint32_t sum = 0;
+  for (int i = 0; i < 16; i++) sum += analogReadMilliVolts(BAT_ADC_PIN);  // 16번 읽어 평균
+  float v = (sum / 16.0f) * BAT_DIVIDER / 1000.0f;
+  if (v >= BAT_CURVE[0][0]) return 100;
+  for (int i = 1; i < BAT_CURVE_N; i++) {
+    if (v >= BAT_CURVE[i][0]) {
+      float hi = BAT_CURVE[i - 1][0], lo = BAT_CURVE[i][0];
+      float ph = BAT_CURVE[i - 1][1], pl = BAT_CURVE[i][1];
+      return (int)(pl + (ph - pl) * (v - lo) / (hi - lo) + 0.5f);
+    }
+  }
+  return 0;
+}
+
+uint32_t lastBattery = 0;
+
+void drawBattery() {
+  int pct = batteryPercent();
+  uint16_t color = pct > 30 ? COLOR_GREEN : pct > 15 ? COLOR_YELLOW : COLOR_RED;
+  String label = String(pct) + "%";
+  gfx->setFont();  // 작은 기본 글꼴
+  gfx->setTextSize(1);
+  const int16_t w = 6 * label.length();
+  gfx->fillRect(240 - 40, 240 - 12, 40, 12, COLOR_BG);  // 이전 숫자 지우기
+  gfx->setTextColor(color);
+  gfx->setCursor(240 - 4 - w, 240 - 10);
+  gfx->print(label);
+  lastBattery = millis();
 }
 
 void render(const String &title, const String &text) {
@@ -215,6 +261,7 @@ void render(const String &title, const String &text) {
 
   gfx->setTextColor(COLOR_TEXT);
   drawWrapped(text, top);
+  drawBattery();
 }
 
 void sendCommand(const char *cmd) {
@@ -252,10 +299,6 @@ bool pressed(uint8_t pin, bool &wasDown) {
   wasDown = down;
   return fired;
 }
-
-const uint16_t COLOR_RED = 0xF800;
-const uint16_t COLOR_GREEN = 0x07E0;
-const uint16_t COLOR_YELLOW = 0xFFE0;
 
 // ---- 진단용: 화면에 작은 글씨로 여러 줄을 찍는다 ----
 int16_t diagY = 4;
@@ -372,6 +415,8 @@ void loop() {
     if (WiFi.status() == WL_CONNECTED) poll();
     else WiFi.reconnect();
   }
+
+  if (millis() - lastBattery >= 30000) drawBattery();  // 30초마다 배터리 숫자만 갱신
 
   delay(20);
 }
