@@ -393,6 +393,7 @@ void touchBegin() {
   digitalWrite(TP_RST, HIGH);
   delay(60);
   Wire.begin(TP_SDA, TP_SCL);
+  Wire.setTimeOut(20);  // 터치 칩이 응답하지 않아도 20ms 안에 포기한다 (버튼이 멈추지 않게)
   Wire.beginTransmission(TP_ADDR);  // 터치 칩이 저절로 잠들지 않게 한다
   Wire.write(0xFE);
   Wire.write(0x01);
@@ -433,12 +434,11 @@ void setup() {
   diagLine(WiFi.localIP().toString());
   delay(1200);
 
-  touchBegin();
-
   secureClient.setInsecure();  // 서버 인증서 검증 생략 (개인용)
   http.setReuse(true);         // 연결을 유지해 응답을 빠르게
 
   render("", "READY");
+  touchBegin();  // 터치는 맨 마지막에 준비한다. 여기서 문제가 생겨도 버튼은 동작한다
 }
 
 void loop() {
@@ -455,12 +455,16 @@ void loop() {
   }
 
   // 화면을 톡 치면 BOOT 버튼과 똑같이 "다음". 누르고 있어도 한 번만, 연달아 치는 것도 0.3초 간격으로만 인정
-  bool touchDown = touchIsDown();
-  if (touchDown && !touchWasDown && millis() - lastTap > 300) {
-    lastTap = millis();
-    sendCommand("next");
+  static uint32_t lastTouchPoll = 0;
+  if (millis() - lastTouchPoll >= 40) {  // 터치 칩은 0.04초에 한 번만 확인 (버튼 반응이 느려지지 않게)
+    lastTouchPoll = millis();
+    bool touchDown = touchIsDown();
+    if (touchDown && !touchWasDown && millis() - lastTap > 300) {
+      lastTap = millis();
+      sendCommand("next");
+    }
+    touchWasDown = touchDown;
   }
-  touchWasDown = touchDown;
 
   if (millis() - lastPoll >= POLL_MS) {
     lastPoll = millis();
