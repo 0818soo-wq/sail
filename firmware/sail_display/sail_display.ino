@@ -6,6 +6,7 @@
 // 필요한 라이브러리 (Arduino IDE > 라이브러리 매니저에서 설치):
 //   - GFX Library for Arduino  (moononournation)
 //   - ArduinoJson              (Benoit Blanchon)
+//   - U8g2                     (oliver)   <- 글꼴용
 //
 // 보드 설정 (Arduino IDE > 도구):
 //   보드      : ESP32S3 Dev Module
@@ -17,6 +18,7 @@
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
+#include <U8g2lib.h>
 #include <Arduino_GFX_Library.h>
 
 // ===================== 여기만 고치면 됩니다 =====================
@@ -117,46 +119,97 @@ String forDisplay(const String &raw) {
   return toAscii(raw);
 }
 
-// 단어 단위로 줄을 나눠 그린다
-void drawWrapped(const String &text, uint8_t size, int16_t top) {
-  gfx->setTextSize(size);
-  const int16_t charW = 6 * size;
-  const int16_t lineH = 8 * size + 4;
-  const int16_t maxChars = (240 - 8) / charW;
+// 읽기 편한 굵은 글꼴 (U8g2의 Helvetica Bold). 큰 것부터 차례로 써 보고, 화면에 다 들어가는 가장 큰 글꼴을 고른다
+struct FontSpec {
+  const uint8_t *font;
+  int16_t lineH;    // 줄 간격(px)
+  int16_t ascent;   // 줄 맨 위에서 글자 바닥선까지(px)
+};
+const FontSpec FONTS[] = {
+  {u8g2_font_helvB24_tr, 30, 24},
+  {u8g2_font_helvB18_tr, 23, 18},
+  {u8g2_font_helvB14_tr, 18, 14},
+  {u8g2_font_helvB12_tr, 16, 12},
+};
+const int FONT_COUNT = sizeof(FONTS) / sizeof(FONTS[0]);
+const int16_t TEXT_LEFT = 6;
+const int16_t TEXT_WIDTH = 240 - 12;  // 좌우 여백 6px씩
 
-  int16_t y = top;
-  int start = 0;
-  while (start < (int)text.length() && y < 240 - lineH) {
-    int end = start + maxChars;
-    if (end >= (int)text.length()) {
-      end = text.length();
+uint16_t textWidthPx(const String &s) {
+  int16_t x1, y1;
+  uint16_t w, h;
+  gfx->getTextBounds(s, 0, 0, &x1, &y1, &w, &h);
+  return w;
+}
+
+// 현재 설정된 글꼴로 단어 단위 줄바꿈. lines가 NULL이 아니면 줄 내용도 채운다. 반환값: 줄 수
+int wrapLines(const String &text, String *lines, int maxLines) {
+  int count = 0;
+  String cur;
+  int i = 0, n = text.length();
+  while (i < n) {
+    int sp = text.indexOf(' ', i);
+    if (sp < 0) sp = n;
+    String word = text.substring(i, sp);
+    i = sp + 1;
+    if (word.length() == 0) continue;
+    String trial = cur.length() ? cur + " " + word : word;
+    if (cur.length() && textWidthPx(trial) > TEXT_WIDTH) {
+      if (lines && count < maxLines) lines[count] = cur;
+      count++;
+      cur = word;
     } else {
-      int space = text.lastIndexOf(' ', end);  // 단어 중간에서 자르지 않기
-      if (space > start) end = space;
+      cur = trial;
     }
-    gfx->setCursor(4, y);
-    gfx->print(text.substring(start, end));
-    gfx->setCursor(size >= 3 ? 6 : 5, y);  // 살짝 옆에 한 번 더 그려서 글자를 굵게 만든다
-    gfx->print(text.substring(start, end));
-    y += lineH;
-    start = end;
-    while (start < (int)text.length() && text[start] == ' ') start++;
+  }
+  if (cur.length()) {
+    if (lines && count < maxLines) lines[count] = cur;
+    count++;
+  }
+  return count;
+}
+
+void drawWrapped(const String &text, int16_t top) {
+  gfx->setTextWrap(false);  // 줄바꿈은 우리가 직접 한다 (글자 폭 측정이 틀어지지 않게)
+  const int16_t avail = 240 - top - 2;
+  int pick = FONT_COUNT - 1;
+  for (int f = 0; f < FONT_COUNT; f++) {
+    gfx->setFont(FONTS[f].font);
+    if (wrapLines(text, NULL, 0) * FONTS[f].lineH <= avail) {
+      pick = f;
+      break;
+    }
+  }
+  const FontSpec &fs = FONTS[pick];
+  gfx->setFont(fs.font);
+
+  const int MAX_LINES = 14;
+  String lines[MAX_LINES];
+  int count = wrapLines(text, lines, MAX_LINES);
+  if (count > MAX_LINES) count = MAX_LINES;
+  for (int i = 0; i < count; i++) {
+    int16_t baseline = top + fs.ascent + i * fs.lineH;
+    if (baseline > 240) break;
+    gfx->setCursor(TEXT_LEFT, baseline);
+    gfx->print(lines[i]);
   }
 }
 
 void render(const String &title, const String &text) {
   gfx->fillScreen(COLOR_BG);
 
+  gfx->setFont();  // 제목은 기본 작은 글꼴로
+  gfx->setTextSize(1);
+  int16_t top = 4;
   if (title.length()) {
-    gfx->setTextSize(1);
     gfx->setTextColor(COLOR_TITLE);
     gfx->setCursor(4, 4);
     gfx->print(toAscii(title));
+    top = 18;
   }
 
   gfx->setTextColor(COLOR_TEXT);
-  uint8_t size = text.length() <= 36 ? 3 : 2;  // 짧은 문장은 크게
-  drawWrapped(text, size, 22);
+  drawWrapped(text, top);
 }
 
 void sendCommand(const char *cmd) {
