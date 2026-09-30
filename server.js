@@ -13,7 +13,14 @@ const Anthropic = AnthropicSDK.default || AnthropicSDK;
 
 const app = express();
 app.use(express.json());
-app.use(express.static(__dirname));
+// 앱 파일이 바뀌었는데 폰이 예전 것을 계속 쓰는 일이 없도록, 매번 서버에 새 버전이 있는지 확인하게 한다
+app.use(
+  express.static(__dirname, {
+    setHeaders: (res, filePath) => {
+      if (/\.(html|js|css|json)$/.test(filePath)) res.setHeader("Cache-Control", "no-cache");
+    },
+  })
+);
 
 // ---------- 두 번째 화면 (display.html / ESP32) ----------
 // 앱이 현재 보여주는 문구를 서버가 들고 있다가, 접속한 표시 기기들에 SSE로 즉시 밀어준다.
