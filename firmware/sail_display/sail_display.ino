@@ -328,6 +328,11 @@ void connectWifi() {
 }
 
 void setup() {
+  // 배터리로 쓸 때 전원이 유지되도록 "전원 잠금" 핀(IO2)을 맨 먼저 켠다.
+  // 이걸 안 하면 USB를 빼거나 PWR 버튼에서 손을 떼는 순간 보드가 꺼진다
+  pinMode(2, OUTPUT);
+  digitalWrite(2, HIGH);
+
   Serial.begin(115200);
 
   ledcAttach(LCD_BL, 5000, 8);  // 백라이트를 PWM으로 켜서 밝기를 조절한다
