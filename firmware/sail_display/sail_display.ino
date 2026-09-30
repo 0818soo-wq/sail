@@ -40,8 +40,9 @@ const char *SERVER_HOST = "opic-trainer-tw9g.onrender.com";
 #define LCD_BL 46    // LCD_BL (백라이트)
 
 // 4) 버튼 - 보드 윗면의 왼쪽 "BOOT"(IO0)와 오른쪽 "PLUS"(IO4)
-//    왼쪽 BOOT = 질문 끝, 답변 시작 / 오른쪽 PLUS = 새 질문 듣기 / 다음 문장 = 화면 터치
-#define BTN_START 0   // 답변 시작
+//    왼쪽 BOOT = 화면 터치 = 다음 (듣는 중이면 질문 끝내고 답변 시작, 답변 중이면 다음 문장)
+//    오른쪽 PLUS = 새 질문 듣기
+#define BTN_START 0   // 다음 (BOOT)
 #define BTN_LISTEN 4  // 새 질문 듣기
 
 // 4-1) 터치 칩(CST816) 핀 - 그대로 두면 됩니다
@@ -379,7 +380,7 @@ void connectWifi() {
   }
 }
 
-// ---- 화면 터치 (다음 문장) ----
+// ---- 화면 터치 (BOOT 버튼과 같은 "다음") ----
 volatile uint32_t touchIntMs = 0;
 void IRAM_ATTR onTouchInt() {
   touchIntMs = millis();
@@ -445,7 +446,7 @@ void loop() {
   static uint32_t lastTap = 0;
 
   if (pressed(BTN_START, startWasDown)) {
-    sendCommand("start");
+    sendCommand("next");
     delay(150);
   }
   if (pressed(BTN_LISTEN, listenWasDown)) {
@@ -453,11 +454,11 @@ void loop() {
     delay(150);
   }
 
-  // 화면을 톡 치면 다음 문장. 누르고 있어도 한 번만, 연달아 치는 것도 0.3초 간격으로만 인정
+  // 화면을 톡 치면 BOOT 버튼과 똑같이 "다음". 누르고 있어도 한 번만, 연달아 치는 것도 0.3초 간격으로만 인정
   bool touchDown = touchIsDown();
   if (touchDown && !touchWasDown && millis() - lastTap > 300) {
     lastTap = millis();
-    sendCommand("advance");
+    sendCommand("next");
   }
   touchWasDown = touchDown;
 
