@@ -72,7 +72,7 @@ function sendControl(cmd) {
 
 app.post("/api/control", (req, res) => {
   const { cmd } = req.body || {};
-  if (cmd !== "listen" && cmd !== "next") return res.status(400).json({ error: "invalid cmd" });
+  if (!["listen", "next", "start", "advance"].includes(cmd)) return res.status(400).json({ error: "invalid cmd" });
   sendControl(cmd);
   res.json({ ok: true });
 });

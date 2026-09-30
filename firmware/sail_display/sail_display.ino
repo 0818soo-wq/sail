@@ -14,6 +14,7 @@
 //   Flash Size: 16MB (128Mb)
 //   USB CDC On Boot: Enabled     <- 이걸 켜야 시리얼 모니터가 보인다
 
+#include <Wire.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
@@ -38,9 +39,17 @@ const char *SERVER_HOST = "opic-trainer-tw9g.onrender.com";
 #define LCD_RST 40   // LCD_RST
 #define LCD_BL 46    // LCD_BL (백라이트)
 
-// 4) 버튼 - 보드 윗면의 "-KEY"(IO0)와 "PLUS"(IO4)
-#define BTN_NEXT 0    // 다음 문장
+// 4) 버튼 - 보드 윗면의 왼쪽 "BOOT"(IO0)와 오른쪽 "PLUS"(IO4)
+//    왼쪽 BOOT = 질문 끝, 답변 시작 / 오른쪽 PLUS = 새 질문 듣기 / 다음 문장 = 화면 터치
+#define BTN_START 0   // 답변 시작
 #define BTN_LISTEN 4  // 새 질문 듣기
+
+// 4-1) 터치 칩(CST816) 핀 - 그대로 두면 됩니다
+#define TP_SDA 42
+#define TP_SCL 41
+#define TP_RST 47
+#define TP_INT 48
+#define TP_ADDR 0x15
 
 // 5) 화면 방향 0~3. 글자가 뒤집혀 보이면 숫자를 바꿔보세요
 #define LCD_ROTATION 0
@@ -370,6 +379,37 @@ void connectWifi() {
   }
 }
 
+// ---- 화면 터치 (다음 문장) ----
+volatile uint32_t touchIntMs = 0;
+void IRAM_ATTR onTouchInt() {
+  touchIntMs = millis();
+}
+
+void touchBegin() {
+  pinMode(TP_RST, OUTPUT);
+  digitalWrite(TP_RST, LOW);
+  delay(10);
+  digitalWrite(TP_RST, HIGH);
+  delay(60);
+  Wire.begin(TP_SDA, TP_SCL);
+  Wire.beginTransmission(TP_ADDR);  // 터치 칩이 저절로 잠들지 않게 한다
+  Wire.write(0xFE);
+  Wire.write(0x01);
+  Wire.endTransmission();
+  pinMode(TP_INT, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(TP_INT), onTouchInt, FALLING);
+}
+
+// 지금 손가락이 화면에 닿아 있는지
+bool touchIsDown() {
+  Wire.beginTransmission(TP_ADDR);
+  Wire.write(0x02);  // 손가락 개수 레지스터
+  if (Wire.endTransmission() == 0 && Wire.requestFrom((uint8_t)TP_ADDR, (uint8_t)1) == 1) {
+    if (Wire.read() > 0) return true;
+  }
+  return millis() - touchIntMs < 60;  // 방금 터치 신호가 있었어도 눌린 것으로 본다
+}
+
 void setup() {
   // 배터리로 쓸 때 전원이 유지되도록 "전원 잠금" 핀(IO2)을 맨 먼저 켠다.
   // 이걸 안 하면 USB를 빼거나 PWR 버튼에서 손을 떼는 순간 보드가 꺼진다
@@ -380,7 +420,7 @@ void setup() {
 
   ledcAttach(LCD_BL, 5000, 8);  // 백라이트를 PWM으로 켜서 밝기를 조절한다
   ledcWrite(LCD_BL, BL_BRIGHTNESS);
-  pinMode(BTN_NEXT, INPUT_PULLUP);
+  pinMode(BTN_START, INPUT_PULLUP);
   pinMode(BTN_LISTEN, INPUT_PULLUP);
 
   gfx->begin();
@@ -392,6 +432,8 @@ void setup() {
   diagLine(WiFi.localIP().toString());
   delay(1200);
 
+  touchBegin();
+
   secureClient.setInsecure();  // 서버 인증서 검증 생략 (개인용)
   http.setReuse(true);         // 연결을 유지해 응답을 빠르게
 
@@ -399,16 +441,25 @@ void setup() {
 }
 
 void loop() {
-  static bool nextWasDown = false, listenWasDown = false;
+  static bool startWasDown = false, listenWasDown = false, touchWasDown = false;
+  static uint32_t lastTap = 0;
 
-  if (pressed(BTN_NEXT, nextWasDown)) {
-    sendCommand("next");
+  if (pressed(BTN_START, startWasDown)) {
+    sendCommand("start");
     delay(150);
   }
   if (pressed(BTN_LISTEN, listenWasDown)) {
     sendCommand("listen");
     delay(150);
   }
+
+  // 화면을 톡 치면 다음 문장. 누르고 있어도 한 번만, 연달아 치는 것도 0.3초 간격으로만 인정
+  bool touchDown = touchIsDown();
+  if (touchDown && !touchWasDown && millis() - lastTap > 300) {
+    lastTap = millis();
+    sendCommand("advance");
+  }
+  touchWasDown = touchDown;
 
   if (millis() - lastPoll >= POLL_MS) {
     lastPoll = millis();

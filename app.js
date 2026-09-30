@@ -541,6 +541,12 @@ function handleRemote(cmd) {
   } else if (cmd === "next") {
     if (session.phase === "LISTENING") submitQuestion();
     else if (session.phase === "S_WAIT") advance();
+  } else if (cmd === "start") {
+    // 질문이 끝났으니 답변 시작. 듣는 중일 때만 반응해서, 답변 도중에 눌려도 문장이 넘어가지 않는다
+    if (session.phase === "LISTENING") submitQuestion();
+  } else if (cmd === "advance") {
+    // 다음 문장. 답변이 진행 중일 때만 반응한다
+    if (session.phase === "S_WAIT") advance();
   }
 }
 
