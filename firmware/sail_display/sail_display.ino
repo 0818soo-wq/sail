@@ -45,6 +45,9 @@ const char *SERVER_HOST = "opic-trainer-tw9g.onrender.com";
 // 5) 화면 방향 0~3. 글자가 뒤집혀 보이면 숫자를 바꿔보세요
 #define LCD_ROTATION 0
 
+// 6) 화면 밝기 0(꺼짐)~255(최대). 낮출수록 눈이 편하고 배터리가 오래 갑니다
+#define BL_BRIGHTNESS 60
+
 // ==============================================================
 
 Arduino_DataBus *bus = new Arduino_ESP32SPI(LCD_DC, LCD_CS, LCD_SCK, LCD_MOSI, GFX_NOT_DEFINED);
@@ -327,8 +330,8 @@ void connectWifi() {
 void setup() {
   Serial.begin(115200);
 
-  pinMode(LCD_BL, OUTPUT);
-  digitalWrite(LCD_BL, HIGH);
+  ledcAttach(LCD_BL, 5000, 8);  // 백라이트를 PWM으로 켜서 밝기를 조절한다
+  ledcWrite(LCD_BL, BL_BRIGHTNESS);
   pinMode(BTN_NEXT, INPUT_PULLUP);
   pinMode(BTN_LISTEN, INPUT_PULLUP);
 
