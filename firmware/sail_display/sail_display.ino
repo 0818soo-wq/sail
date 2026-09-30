@@ -136,7 +136,7 @@ const FontSpec FONTS[] = {
 };
 const int FONT_COUNT = sizeof(FONTS) / sizeof(FONTS[0]);
 // 글꼴 크기를 일정하게: 0=가장 큼(24), 1=18, 2=14, 3=12. 문장이 화면에 안 들어갈 때만 자동으로 더 작아진다
-const int START_FONT = 1;
+const int START_FONT = 2;
 const int16_t TEXT_LEFT = 6;
 const int16_t TEXT_WIDTH = 240 - 12;  // 좌우 여백 6px씩
 
