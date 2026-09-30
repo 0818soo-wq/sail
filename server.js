@@ -347,6 +347,7 @@ Requirements:
 - Role-plays: stay in the role and speak directly to that person. Ask as many questions as you were told to, each on a different point. If given a problem, acknowledge it, explain your situation, and propose two concrete alternatives
 - Opinion questions: take a clear position, give two reasons, and support at least one of them with something from your own experience. Briefly acknowledge the other side before closing. This is where Superior is won
 - Hypothetical questions: follow the premise through to a consequence rather than deflecting to what actually happened
+- Phrase breaks: inside every sentence, mark natural pauses with " / " (a space, a slash, a space) so the test taker knows where to breathe and where to chunk the sentence while repeating it. Put a break after an introductory phrase or clause ("If I had to pick one, /"), before a relative or subordinate clause ("/ which is why", "/ because"), between the items of a list, and before a prepositional phrase that carries new information. Each sentence gets two to four breaks, so each chunk is roughly three to seven words. Never split a tight unit such as an article and its noun, a verb and a short object, or a preposition and its noun; never put a break at the very start or end of a sentence
 - Never mention the test, the rating, or that this is a practice answer
 
 Advanced High features - every answer should show two or three of these, woven in naturally. Two done well beats five crammed in:
@@ -358,8 +359,8 @@ Advanced High features - every answer should show two or three of these, woven i
 
 OUTPUT FORMAT - follow exactly:
 - First line: the question you are actually answering, reconstructed as the examiner would have said it, prefixed with "Q: "
-- Then the answer, one sentence per line, each line a complete sentence. Nothing after it
-- No numbering, no bullets, no blank lines, no quotation marks, no markdown, no filler sounds
+- Then the answer, one sentence per line, each line a complete sentence with its " / " phrase breaks. Nothing after it
+- No numbering, no bullets, no blank lines, no quotation marks, no markdown, no filler sounds. The " / " phrase breaks are the only slashes allowed, and the "Q:" line carries none
 - Do not include internal or system XML tags in your response`;
 
 app.post("/api/answer", express.raw({ type: () => true, limit: "25mb" }), async (req, res) => {
