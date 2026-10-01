@@ -138,6 +138,7 @@ async function startListening() {
   if (!supportsMic) {
     session.phase = "MIC_ERROR";
     render();
+    updateDisplay("", "오류 · 듣기를 다시 눌러주세요");
     return;
   }
 
@@ -156,6 +157,7 @@ async function startListening() {
     if (session.token !== token) return;
     session.phase = "MIC_ERROR";
     render();
+    updateDisplay("", "오류 · 듣기를 다시 눌러주세요");
     return;
   }
 
@@ -355,10 +357,15 @@ function finishItem() {
   });
 }
 
+// 다른 화면(보드/모니터/워치)에는 짧은 문구로 알려서, 이전 상태("답변 만드는 중")가 남지 않게 한다
+const NOT_HEARD_MARKS = [ERROR_MESSAGES.no_speech, ERROR_MESSAGES.unclear, "마이크 입력이 0"];
+
 function showError(message) {
   session.phase = "ERROR";
   session.errorMessage = message;
   render();
+  const notHeard = NOT_HEARD_MARKS.some((m) => message.includes(m));
+  updateDisplay("", notHeard ? "질문 못 들음 · 듣기를 다시 눌러주세요" : "오류 · 듣기를 다시 눌러주세요");
 }
 
 // 스트리밍으로 문장이 도착하거나 스트림이 끝났을 때, 기다리던 상태를 풀어준다

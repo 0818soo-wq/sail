@@ -88,6 +88,8 @@ struct Phrase {
   const char *en;
 };
 const Phrase PHRASES[] = {
+  {"질문 못 들음", "NO QUESTION - PRESS LISTEN"},
+  {"오류", "ERROR - PRESS LISTEN"},
   {"질문 듣는 중", "LISTENING..."},
   {"답변 만드는 중", "THINKING..."},
   {"답변 끝", "DONE"},
