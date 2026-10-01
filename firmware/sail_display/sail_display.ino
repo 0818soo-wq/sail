@@ -394,6 +394,8 @@ void IRAM_ATTR onTouchInt() {
   touchIntMs = millis();
 }
 
+String touchStatus = "";  // 부팅 화면 왼쪽 위에 보여줄 터치 상태
+
 void touchBegin() {
   pinMode(TP_RST, OUTPUT);
   digitalWrite(TP_RST, LOW);
@@ -405,9 +407,17 @@ void touchBegin() {
   Wire.beginTransmission(TP_ADDR);  // 터치 칩이 저절로 잠들지 않게 한다
   Wire.write(0xFE);
   Wire.write(0x01);
-  Wire.endTransmission();
+  bool ok = (Wire.endTransmission() == 0);
   pinMode(TP_INT, INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(TP_INT), onTouchInt, FALLING);
+
+  // 진단: I2C에 연결된 장치 주소를 찾아 보여준다
+  String found;
+  for (uint8_t a = 0x08; a < 0x78; a++) {
+    Wire.beginTransmission(a);
+    if (Wire.endTransmission() == 0) found += String(a, HEX) + " ";
+  }
+  touchStatus = String(ok ? "touch OK" : "touch NOT FOUND") + " | i2c: " + (found.length() ? found : "none");
 }
 
 // 지금 손가락이 화면에 닿아 있는지
@@ -483,8 +493,8 @@ void setup() {
   secureClient.setInsecure();  // 서버 인증서 검증 생략 (개인용)
   http.setReuse(true);         // 연결을 유지해 응답을 빠르게
 
-  render("", "READY");
-  touchBegin();  // 터치는 맨 마지막에 준비한다. 여기서 문제가 생겨도 버튼은 동작한다
+  touchBegin();  // 터치 준비 (응답이 없어도 20ms 만에 포기하므로 버튼은 영향 없음)
+  render(touchStatus, "READY");
 }
 
 void loop() {
@@ -508,7 +518,10 @@ void loop() {
     bool touchDown = touchIsDown();
     if (touchDown && !touchWasDown && millis() - lastTap > 300) {
       lastTap = millis();
+      gfx->fillRect(228, 0, 12, 12, COLOR_GREEN);  // 터치가 인식되면 오른쪽 위에 초록 점이 잠깐 뜬다
       sendCommand("next");
+      delay(100);
+      gfx->fillRect(228, 0, 12, 12, COLOR_BG);
     }
     touchWasDown = touchDown;
   }
