@@ -15,6 +15,8 @@
 //   USB CDC On Boot: Enabled     <- 이걸 켜야 시리얼 모니터가 보인다
 
 #include <Wire.h>
+#include <driver/rtc_io.h>
+#include <esp_sleep.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
@@ -44,6 +46,10 @@ const char *SERVER_HOST = "opic-trainer-tw9g.onrender.com";
 //    오른쪽 PLUS = 새 질문 듣기
 #define BTN_START 0   // 다음 (BOOT)
 #define BTN_LISTEN 4  // 새 질문 듣기
+
+// 4-2) 가운데 PWR 버튼: 2초 길게 누르면 전원 끄기 (배터리는 다시 PWR을 눌러야 켜짐)
+#define BTN_PWR 5
+#define BAT_HOLD 2   // 배터리 전원 잠금 핀
 
 // 4-1) 터치 칩(CST816) 핀 - 그대로 두면 됩니다
 #define TP_SDA 42
@@ -414,11 +420,49 @@ bool touchIsDown() {
   return millis() - touchIntMs < 60;  // 방금 터치 신호가 있었어도 눌린 것으로 본다
 }
 
+// ---- 전원 끄기 (PWR 버튼 길게) ----
+void powerOff() {
+  gfx->fillScreen(COLOR_BG);
+  gfx->setFont();
+  gfx->setTextSize(3);
+  gfx->setTextColor(COLOR_TEXT);
+  gfx->setCursor(78, 108);
+  gfx->print("OFF");
+  delay(700);
+
+  ledcWrite(LCD_BL, 0);  // 화면 끄기
+  gfx->fillScreen(COLOR_BG);
+  digitalWrite(BAT_HOLD, LOW);  // 배터리 전원 잠금 해제: 버튼에서 손을 떼면 완전히 꺼진다
+
+  while (digitalRead(BTN_PWR) == LOW) delay(10);  // 손 뗄 때까지 기다린다
+  delay(50);
+
+  // USB가 꽂혀 있어 전원이 안 꺼지는 경우: 절전 상태로 들어가고, PWR을 누르면 다시 켜진다
+  rtc_gpio_pullup_en((gpio_num_t)BTN_PWR);
+  rtc_gpio_pulldown_dis((gpio_num_t)BTN_PWR);
+  esp_sleep_enable_ext0_wakeup((gpio_num_t)BTN_PWR, 0);
+  esp_deep_sleep_start();
+}
+
+// 2초 이상 누르고 있으면 끈다. 켤 때 누르고 있던 손을 뗄 때까지는 무시한다
+void checkPowerButton() {
+  static bool armed = false;
+  static uint32_t downAt = 0;
+  if (digitalRead(BTN_PWR) != LOW) {
+    armed = true;
+    downAt = 0;
+  } else if (armed) {
+    if (downAt == 0) downAt = millis();
+    else if (millis() - downAt > 2000) powerOff();
+  }
+}
+
 void setup() {
   // 배터리로 쓸 때 전원이 유지되도록 "전원 잠금" 핀(IO2)을 맨 먼저 켠다.
   // 이걸 안 하면 USB를 빼거나 PWR 버튼에서 손을 떼는 순간 보드가 꺼진다
-  pinMode(2, OUTPUT);
-  digitalWrite(2, HIGH);
+  pinMode(BAT_HOLD, OUTPUT);
+  digitalWrite(BAT_HOLD, HIGH);
+  pinMode(BTN_PWR, INPUT_PULLUP);
 
   Serial.begin(115200);
 
@@ -444,6 +488,7 @@ void setup() {
 }
 
 void loop() {
+  checkPowerButton();
   static bool startWasDown = false, listenWasDown = false, touchWasDown = false;
   static uint32_t lastTap = 0;
 
